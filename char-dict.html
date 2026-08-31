@@ -21,6 +21,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #recBtn .mic{font-size:clamp(50px,8vh,90px);line-height:1;margin-bottom:2px;}
 #recBtn .hint{font-size:clamp(16px,2.4vh,24px);font-weight:700;letter-spacing:2px;opacity:.9;}
 #recBtn.holding{background:linear-gradient(135deg,#FF5A5F,#FF7A7A);box-shadow:0 8px 30px rgba(255,90,95,.4);animation:none;transform:scale(.95);}
+#recBtn .rec-state{display:none;flex-direction:column;align-items:center;gap:clamp(6px,1vh,10px);}
+#recBtn.holding .rec-state{display:flex;}
+#recBtn.holding .mic,#recBtn.holding .hint{display:none;}
+#recBtn .rec-wave{display:flex;align-items:center;gap:6px;height:clamp(32px,5vh,48px);}
+#recBtn .rec-wave i{width:8px;border-radius:5px;background:#fff;height:14px;}
+#recBtn .rec-ring{width:clamp(40px,6.5vh,64px);height:clamp(40px,6.5vh,64px);border-radius:50%;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite;display:none;}
+#recBtn .rec-txt{font-size:clamp(16px,2.4vh,22px);font-weight:700;letter-spacing:2px;color:#fff;}
+#recBtn .rec-txt.recognizing{animation:recPulse 1.2s ease-in-out infinite;}
+@keyframes recPulse{0%,100%{opacity:1}50%{opacity:.4}}
+#recStatusPill{position:fixed;left:50%;bottom:clamp(46px,12vh,100px);transform:translateX(-50%);z-index:60;background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:clamp(10px,1.6vh,14px) clamp(18px,3vw,26px);display:none;align-items:center;gap:10px;font-size:clamp(15px,2.2vh,20px);font-weight:700;color:#2D2A26;letter-spacing:1px;white-space:nowrap;}
+#recStatusPill .pill-wave{display:flex;align-items:center;gap:5px;height:clamp(24px,3.5vh,34px);}
+#recStatusPill .pill-wave i{width:7px;border-radius:4px;background:#FF9D3C;height:10px;}
+#recStatusPill #pillTxt.recognizing{animation:recPulse 1.2s ease-in-out infinite;}
 @keyframes breath{0%,100%{box-shadow:0 8px 30px rgba(255,122,0,.3);}50%{box-shadow:0 8px 50px rgba(255,122,0,.5);}}
 .voice-sub{font-size:clamp(14px,2vh,20px);color:#B8A080;letter-spacing:1px;flex-shrink:0;}
 .alt-zone{width:100%;max-width:560px;flex-shrink:0;display:flex;flex-direction:column;gap:clamp(6px,1vh,14px);}
@@ -171,7 +184,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 
 <div id="home">
   <div class="home-brand"><span class="logo">字</span><span>查字宝</span></div>
-  <button id="recBtn" aria-label="按住说话查字"><span class="mic">🎙️</span><span class="hint">按住说字</span></button>
+  <button id="recBtn" aria-label="按住说话查字"><span class="mic">🎙️</span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-txt">松开 查字</span></span></button>
   <p class="voice-sub">想查哪个字？按住说给它听</p>
   <div class="alt-zone">
     <div id="searchBox">
@@ -229,6 +242,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   </div>
 </div>
 
+<div id="recStatusPill"><span class="pill-wave"><i></i><i></i><i></i><i></i><i></i></span><span id="pillTxt">松开 查字</span></div>
 <div id="voiceSheet">
   <div id="bubble"><div id="spinRing"></div><div class="state-icon" id="stateIcon">🎙️</div><div id="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="txt" id="stateTxt">松开 查字</div></div>
   <div id="voiceTip">手指上滑 取消</div>
@@ -804,6 +818,7 @@ function bindRecButton(btn){
   btn.addEventListener("contextmenu", function(e){ e.preventDefault(); });
   btn.addEventListener("pointerdown", function(e){
     e.preventDefault();
+    if(rec.autoMode){ cancelAutoRec(); return; }
     rec.btn = btn;
     rec.startY = e.clientY;
     try{ btn.setPointerCapture(e.pointerId); }catch(err){}
@@ -814,93 +829,122 @@ function bindRecButton(btn){
     endHold();
   }, {passive:false});
   btn.addEventListener("pointercancel", function(e){ e.preventDefault(); endHold(); }, {passive:false});
-  btn.addEventListener("pointermove", function(e){ if(!rec.active) return; var moved = rec.startY - e.clientY; setCancelUI(moved > 60); }, {passive:true});
+  btn.addEventListener("pointermove", function(e){ if(!rec.active) return; var moved = rec.startY - e.clientY; setRecState(moved > 60 ? "cancel" : "listen"); }, {passive:true});
 }
 bindRecButton($("recBtn"));
 bindRecButton($("resSpeakBtn"));
 bindRecButton($("backMic"));
-function setCancelUI(on){
-  rec.cancelled = on; var b = $("bubble");
-  $("stateIcon").textContent = on ? "✕" : "🎙️";
-  $("stateTxt").textContent = on ? "松开 取消" : "松开 查字";
-  $("voiceTip").textContent = on ? "松开手指，取消本次" : "手指上滑 取消";
-  b.classList.toggle("canceling", on); $("wave").style.display = on ? "none" : "flex";
-  $("stateIcon").style.display = on ? "block" : "none";
+function setRecState(mode){
+  // mode: "listen" | "cancel" | "recognize" | "off"
+  var btn = rec.btn; if(!btn) return;
+  var isMain = (btn.id === "recBtn");
+  rec.cancelled = (mode === "cancel");
+  function getWaveTxt(){
+    if(isMain) return {w:btn.querySelector(".rec-wave"), t:btn.querySelector(".rec-txt")};
+    return {w:$("recStatusPill").querySelector(".pill-wave"), t:$("pillTxt")};
+  }
+  // off
+  if(mode === "off"){
+    btn.classList.remove("holding");
+    if(isMain){ var st=btn.querySelector(".rec-state"); if(st) st.style.display="none"; var rt=btn.querySelector(".rec-txt"); if(rt) rt.classList.remove("recognizing"); var ring=btn.querySelector(".rec-ring"); if(ring) ring.style.display="none"; }
+    else{ $("recStatusPill").style.display="none"; $("pillTxt").classList.remove("recognizing"); }
+    stopWave(); return;
+  }
+  // on
+  btn.classList.add("holding");
+  var wt = getWaveTxt();
+  if(mode === "listen"){
+    if(isMain){ btn.querySelector(".rec-state").style.display="flex"; var ring2=btn.querySelector(".rec-ring"); if(ring2) ring2.style.display="none"; }
+    else $("recStatusPill").style.display="flex";
+    if(wt.w) wt.w.style.display="flex";
+    if(wt.t) wt.t.textContent="松开 查字";
+    startWave();
+  } else if(mode === "cancel"){
+    if(isMain){ btn.querySelector(".rec-state").style.display="flex"; }
+    else $("recStatusPill").style.display="flex";
+    if(wt.w) wt.w.style.display="none";
+    if(wt.t) wt.t.textContent="松开 取消";
+    stopWave();
+  } else if(mode === "recognize"){
+    if(isMain){
+      btn.querySelector(".rec-state").style.display="flex";
+      var ring=btn.querySelector(".rec-ring"); if(ring) ring.style.display="block";
+      var rt=btn.querySelector(".rec-txt"); if(rt) rt.classList.add("recognizing");
+    } else {
+      $("recStatusPill").style.display="flex";
+      $("pillTxt").classList.add("recognizing");
+    }
+    if(wt.w) wt.w.style.display="none";
+    if(wt.t) wt.t.textContent="识别中…";
+    stopWave();
+  }
+}
+function cancelAutoRec(){
+  rec.autoMode = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
+  stopWave(); rec.active = false;
+  if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} rec.recorderObj = null; }
+  setRecState("off");
+  toast("已取消");
 }
 function startHold(){
   if(rec.active) return;
   if(!engine.asrReady && !cloudASR){ toast("语音识别还在准备中，请稍等…"); return; }
   rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.startTime = Date.now(); ensureAudio();
-  if(rec.btn) rec.btn.classList.add("holding"); $("voiceSheet").classList.add("show"); setCancelUI(false); startWave();
+  if(rec.btn) rec.btn.classList.add("holding"); setRecState("listen");
   startRecording().then(function(recorderObj){
     if(!rec.active){ try{ recorderObj.stop(); }catch(e){} return; }
     rec.recorderObj = recorderObj; rec.recStarted = Date.now();
     rec.timeoutTimer = setTimeout(function(){ if(rec.active) endHold(true); }, 12000);
   }).catch(function(err){
     if(!rec.active) return; rec.active = false; clearTimeout(rec.timer); stopWave();
-    if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show"); toast(err.message || "无法使用麦克风");
+    if(rec.btn) rec.btn.classList.remove("holding"); setRecState("off"); toast(err.message || "无法使用麦克风");
   });
 }
 function endHold(autoStop){
   if(!rec.active && !autoStop) return;
   clearTimeout(rec.timer); clearTimeout(rec.timeoutTimer);
   var dur = Date.now() - rec.startTime;
-  // 快速点一下（<500ms）→ 自动录音模式：显示"正在听"，3秒后自动识别，点遮罩可取消
+  // 快速点一下（<500ms）→ 自动录音模式：显示"正在听"，3秒后自动识别，再点一下取消
   if(!autoStop && dur < 500){
     stopWave(); rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
     if(rec.btn) rec.btn.classList.remove("holding");
-    rec.autoMode = true; // 自动录音模式标记
-    $("bubble").classList.remove("canceling");
-    $("stateIcon").style.display = "none"; $("spinRing").style.display = "none";
-    $("wave").style.display = "flex"; startWave();
-    $("stateTxt").textContent = "正在听…";
-    $("voiceTip").textContent = "点一下 取消";
-    $("voiceSheet").classList.add("show");
+    rec.autoMode = true;
+    setRecState("listen");
     if(rec.recorderObj){
       rec.autoTimer = setTimeout(function(){
-        if(rec.autoMode === false) return; // 已被点击取消
+        if(rec.autoMode === false) return;
         rec.autoMode = false; rec.autoTimer = null;
         stopWave();
         var recorderObj = rec.recorderObj; rec.recorderObj = null;
-        if(!recorderObj){ $("voiceSheet").classList.remove("show"); return; }
+        if(!recorderObj){ setRecState("off"); return; }
         var samples = recorderObj.stop();
-        if(samples.length < 1600){ $("voiceSheet").classList.remove("show"); toast("没听到声音，请再试一次"); return; }
-        $("stateIcon").textContent = "🔍"; $("stateTxt").textContent = "识别中…";
-        $("wave").style.display = "none"; $("stateIcon").style.display = "block"; $("spinRing").style.display = "block"; $("voiceTip").textContent = "正在识别你读的字…";
+        if(samples.length < 1600){ setRecState("off"); toast("没听到声音，请再试一次"); return; }
+        setRecState("recognize");
         cloudRecognize(samples).then(function(text){
-          $("voiceSheet").classList.remove("show");
+          setRecState("off");
           if(text) handleVoiceResult(text); else toast("没听清，再按一次试试");
         });
       }, 3000);
     }
     return;
   }
-  stopWave(); if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show");
+  stopWave(); if(rec.btn) rec.btn.classList.remove("holding"); setRecState("off");
   rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
   if(rec.cancelled){ if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} } rec.recorderObj = null; return; }
   var recorderObj = rec.recorderObj; rec.recorderObj = null;
   if(!recorderObj){ toast("没听到声音，请再试一次"); return; }
   var samples = recorderObj.stop();
   if(samples.length < 1600){ toast("没听到声音，请再试一次"); return; }
-  $("voiceSheet").classList.add("show"); $("bubble").classList.remove("canceling");
-  $("stateIcon").textContent = "🔍"; $("stateTxt").textContent = "识别中…";
-  $("wave").style.display = "none"; $("stateIcon").style.display = "block"; $("voiceTip").textContent = "正在识别你读的字…";
+  setRecState("recognize");
   cloudRecognize(samples).then(function(text){
-    $("voiceSheet").classList.remove("show");
+    setRecState("off");
     if(text) handleVoiceResult(text); else toast("没听清，再按一次试试");
   });
 }
-// 点击录音遮罩：自动录音模式下取消
-$("voiceSheet").addEventListener("click", function(){
-  if(!rec.autoMode) return;
-  rec.autoMode = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
-  stopWave(); rec.active = false;
-  if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} rec.recorderObj = null; }
-  $("voiceSheet").classList.remove("show");
-  toast("已取消");
-});
 function startWave(){
-  var bars = document.querySelectorAll("#wave i");
+  if(!rec.btn) return;
+  var isMain = rec.btn.id === "recBtn";
+  var bars = isMain ? document.querySelectorAll("#recBtn .rec-wave i") : document.querySelectorAll("#recStatusPill .pill-wave i");
   rec.animTimer = setInterval(function(){ bars.forEach(function(b){ b.style.height = (8+Math.round(Math.random()*35))+"px"; }); }, 110);
 }
 function stopWave(){ clearInterval(rec.animTimer); }
