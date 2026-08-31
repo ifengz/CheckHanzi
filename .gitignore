@@ -15,4 +15,5 @@ dev-server.key
 char-dict.template.html
 
 # 系统
-.DS_Store
+.DS_Store//
+.dsh-vision-toolkit/
