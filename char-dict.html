@@ -27,6 +27,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #recBtn .rec-wave{display:flex;align-items:center;gap:6px;height:clamp(32px,5vh,48px);}
 #recBtn .rec-wave i{width:8px;border-radius:5px;background:#fff;height:14px;}
 #recBtn .rec-ring{width:clamp(40px,6.5vh,64px);height:clamp(40px,6.5vh,64px);border-radius:50%;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite;display:none;}
+#recBtn .rec-dots{display:none;align-items:center;gap:clamp(6px,1vh,9px);height:clamp(32px,5vh,48px);}
+#recBtn .rec-dots i{width:clamp(10px,1.6vh,14px);height:clamp(10px,1.6vh,14px);border-radius:50%;background:#FFD9E8;animation:dotJump .8s ease-in-out infinite;}
+#recBtn .rec-dots i:nth-child(2){background:#FFE9B8;animation-delay:.13s;}
+#recBtn .rec-dots i:nth-child(3){background:#E5D4FF;animation-delay:.26s;}
+@keyframes dotJump{0%,100%{transform:translateY(0) scale(1);opacity:.5}50%{transform:translateY(-30%) scale(1.2);opacity:1}}
 #recBtn .rec-txt{font-size:clamp(16px,2.4vh,22px);font-weight:700;letter-spacing:2px;color:#fff;}
 #recBtn .rec-txt.recognizing{animation:recPulse 1.2s ease-in-out infinite;}
 @keyframes recPulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -184,7 +189,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 
 <div id="home">
   <div class="home-brand"><span class="logo">字</span><span>查字宝</span></div>
-  <button id="recBtn" aria-label="按住说话查字"><span class="mic">🎙️</span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-txt">松开 查字</span></span></button>
+  <button id="recBtn" aria-label="按住说话查字"><span class="mic">🎙️</span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-dots"><i></i><i></i><i></i></span><span class="rec-txt">松开 查字</span></span></button>
   <p class="voice-sub">想查哪个字？按住说给它听</p>
   <div class="alt-zone">
     <div id="searchBox">
@@ -811,7 +816,15 @@ $("clearHistory").addEventListener("click", function(){ histList = []; saveHisto
 var detailFrom = "home"; // 记录从哪个页面进入详情页
 $("backBtn").addEventListener("click", function(){ try{ speechSynthesis.cancel(); }catch(e){} if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc=null; } cleanups.forEach(function(t){ clearInterval(t.interval); }); cleanups=[]; $("detail").classList.remove("show"); if(detailFrom === "results"){ $("results").classList.add("show"); } else if(detailFrom === "history"){ $("history").classList.add("show"); } else { $("home").style.display = "flex"; } });
 $("detHistBtn").addEventListener("click", openHistory);
-var rec = { active:false, timer:null, startTime:0, cancelled:false, startY:0, animTimer:null, autoTimer:null, btn:null };
+var rec = { active:false, timer:null, startTime:0, cancelled:false, startY:0, animTimer:null, autoTimer:null, btn:null, tipTimer:null };
+// 识别等待提示语：让孩子知道"它在认真工作"，轮播缓解等待无聊
+var recTips = ["🔍 认真听你说…","✨ 在找字宝宝…","🌈 马上就好…","⭐ 马上出来啦…"];
+function startRecTips(el){
+  stopRecTips(); if(!el) return;
+  var i = 0; el.textContent = recTips[0]; el.classList.add("recognizing");
+  rec.tipTimer = setInterval(function(){ i = (i+1) % recTips.length; el.textContent = recTips[i]; }, 800);
+}
+function stopRecTips(){ if(rec.tipTimer){ clearInterval(rec.tipTimer); rec.tipTimer = null; } }
 // 给任意按钮绑定"按住说话"录音（主页大按钮、结果页/详情页头部按钮通用）
 function bindRecButton(btn){
   if(!btn) return;
@@ -845,17 +858,32 @@ function setRecState(mode){
   }
   // off
   if(mode === "off"){
-    btn.classList.remove("holding");
-    if(isMain){ var st=btn.querySelector(".rec-state"); if(st) st.style.display="none"; var rt=btn.querySelector(".rec-txt"); if(rt) rt.classList.remove("recognizing"); var ring=btn.querySelector(".rec-ring"); if(ring) ring.style.display="none"; }
-    else{ $("recStatusPill").style.display="none"; $("pillTxt").classList.remove("recognizing"); }
+    btn.classList.remove("holding"); stopRecTips();
+    if(isMain){
+      var st=btn.querySelector(".rec-state"); if(st) st.style.display="none";
+      var rt=btn.querySelector(".rec-txt"); if(rt) rt.classList.remove("recognizing");
+      var ring=btn.querySelector(".rec-ring"); if(ring) ring.style.display="none";
+      var dots3=btn.querySelector(".rec-dots"); if(dots3) dots3.style.display="none";
+    } else {
+      $("recStatusPill").style.display="none";
+      $("pillTxt").classList.remove("recognizing");
+    }
     stopWave(); return;
   }
   // on
   btn.classList.add("holding");
   var wt = getWaveTxt();
   if(mode === "listen"){
-    if(isMain){ btn.querySelector(".rec-state").style.display="flex"; var ring2=btn.querySelector(".rec-ring"); if(ring2) ring2.style.display="none"; }
-    else $("recStatusPill").style.display="flex";
+    stopRecTips();
+    if(isMain){
+      btn.querySelector(".rec-state").style.display="flex";
+      var ring2=btn.querySelector(".rec-ring"); if(ring2) ring2.style.display="none";
+      var dots2=btn.querySelector(".rec-dots"); if(dots2) dots2.style.display="none";
+      var rt2=btn.querySelector(".rec-txt"); if(rt2) rt2.classList.remove("recognizing");
+    } else {
+      $("recStatusPill").style.display="flex";
+      $("pillTxt").classList.remove("recognizing");
+    }
     if(wt.w) wt.w.style.display="flex";
     if(wt.t) wt.t.textContent="松开 查字";
     startWave();
@@ -868,14 +896,13 @@ function setRecState(mode){
   } else if(mode === "recognize"){
     if(isMain){
       btn.querySelector(".rec-state").style.display="flex";
-      var ring=btn.querySelector(".rec-ring"); if(ring) ring.style.display="block";
-      var rt=btn.querySelector(".rec-txt"); if(rt) rt.classList.add("recognizing");
+      var ring=btn.querySelector(".rec-ring"); if(ring) ring.style.display="none";
+      var dots=btn.querySelector(".rec-dots"); if(dots) dots.style.display="flex";
     } else {
       $("recStatusPill").style.display="flex";
-      $("pillTxt").classList.add("recognizing");
     }
     if(wt.w) wt.w.style.display="none";
-    if(wt.t) wt.t.textContent="识别中…";
+    startRecTips(wt.t);
     stopWave();
   }
 }
