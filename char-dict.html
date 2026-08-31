@@ -37,18 +37,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #results .r-sub{font-size:clamp(14px,2vh,18px);color:#B8A080;text-align:center;flex-shrink:0;}
 #resMainArea{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:clamp(8px,1.2vh,16px);padding:clamp(4px,.8vh,12px) clamp(12px,2vw,20px);overflow:hidden;}
 #resultChars{display:flex;justify-content:center;align-items:center;gap:clamp(12px,2vh,24px);flex-wrap:wrap;flex-shrink:0;}
-.char-card{min-width:clamp(120px,15vw,220px);flex:1;max-width:clamp(170px,27vw,280px);background:#fff;border:3px solid #FFE0B8;border-radius:clamp(14px,2vh,24px);padding:clamp(12px,2vh,24px) clamp(12px,1.8vw,18px) clamp(12px,2vh,22px);display:flex;flex-direction:column;align-items:center;box-shadow:0 6px 20px rgba(255,122,0,.12);}
+.char-card{min-width:clamp(120px,15vw,220px);flex:1;max-width:clamp(170px,27vw,280px);background:#fff;border:3px solid #FFE0B8;border-radius:clamp(14px,2vh,24px);padding:clamp(12px,2vh,24px) clamp(12px,1.8vw,18px) clamp(12px,2vh,22px);display:flex;flex-direction:column;align-items:center;box-shadow:0 6px 20px rgba(255,122,0,.12);transition:transform .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .char-card .zi{font-size:clamp(82px,13vh,150px);line-height:1.1;font-weight:700;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;}
 .char-card .py{font-size:clamp(20px,3vh,30px);color:#BB8C4F;font-weight:700;margin-top:clamp(3px,.5vh,8px);}
-.char-card .spk{width:clamp(42px,6vh,60px);height:clamp(42px,6vh,60px);border-radius:50%;border:3px solid #FFE0B8;margin-top:clamp(6px,1vh,14px);background:#fff;color:#2D2A26;font-size:clamp(18px,3vh,26px);flex-shrink:0;}
+.char-card .spk{width:clamp(42px,6vh,60px);height:clamp(42px,6vh,60px);border-radius:50%;border:3px solid #FFE0B8;margin-top:clamp(6px,1vh,14px);background:#fff;color:#2D2A26;font-size:clamp(18px,3vh,26px);flex-shrink:0;transition:transform .12s,background .12s;}
 .char-card .spk.playing{background:#FF9D3C;border-color:#FF9D3C;color:#fff;}
-.char-card:active{transform:scale(.96);border-color:#FF9D3C;}
+.char-card:active,.char-card.pressed{transform:scale(.96);border-color:#FF9D3C;}
 /* 详情页 */
 #detailBody{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(2px,.4vh,8px);overflow:hidden;padding:0 clamp(10px,1.6vw,16px) clamp(4px,.8vh,8px);justify-content:center;}
 .char-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:clamp(14px,2vh,28px);border:3px solid #F0E0C8;padding:clamp(2px,.4vh,8px) clamp(12px,2vw,16px);flex:1;min-height:0;max-height:min(44vh,430px);box-shadow:0 4px 16px rgba(0,0,0,.04);}
 #detailPinyin{font-size:clamp(18px,3vh,32px);color:#BB8C4F;font-weight:700;letter-spacing:6px;margin-bottom:clamp(1px,.3vh,6px);}
 #detailChar{font-size:min(30vh,320px);font-weight:700;line-height:1.05;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;max-width:100%;overflow:hidden;white-space:nowrap;}
-#detailChar:active{transform:scale(.88);}
+#detailChar:active,#detailChar.pressed{transform:scale(.88);}
 #detailMeta{font-size:clamp(11px,1.6vh,14px);color:#C8BCA8;margin-top:clamp(1px,.3vh,4px);}
 #radSection{flex-shrink:0;}
 .rad-card{background:#FFF8E7;border:3px solid #FFE0B8;border-radius:clamp(12px,1.8vh,22px);padding:clamp(4px,.8vh,10px) clamp(10px,1.8vw,18px);display:flex;align-items:center;gap:clamp(8px,1.2vh,16px);box-shadow:0 4px 12px rgba(255,157,60,.08);}
@@ -68,8 +68,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .stroke-num{position:absolute;right:2px;bottom:1px;font-size:clamp(8px,1.2vh,12px);color:#C8BCA8;font-weight:700;}
 /* 组词区 */
 #words{display:flex;gap:clamp(6px,1vh,12px);flex-wrap:wrap;flex-shrink:0;margin:0;}
-.word-card{min-width:clamp(80px,16vw,140px);flex:1;background:#F6FFF8;border:3px solid #C8E6C9;border-radius:clamp(14px,2vh,20px);padding:clamp(6px,1vh,14px) clamp(6px,1vw,8px) clamp(6px,1vh,12px);display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vh,8px);box-shadow:0 4px 12px rgba(76,175,125,.08);cursor:pointer;transition:transform .15s;}
-.word-card:active{transform:scale(.92);}
+.word-card{min-width:clamp(80px,16vw,140px);flex:1;background:#F6FFF8;border:3px solid #C8E6C9;border-radius:clamp(14px,2vh,20px);padding:clamp(6px,1vh,14px) clamp(6px,1vw,8px) clamp(6px,1vh,12px);display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vh,8px);box-shadow:0 4px 12px rgba(76,175,125,.08);cursor:pointer;transition:transform .12s,background .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.word-card:active,.word-card.pressed{transform:scale(.92);background:#E3F5E8;border-color:#8FCE9E;}
+.word-card.playing{background:#FFF4E0;border-color:#FF9D3C;box-shadow:0 4px 14px rgba(255,157,60,.25);}
 .word-card .w{font-size:clamp(18px,3vh,30px);font-weight:700;letter-spacing:2px;}
 .word-card .w u{text-decoration:none;color:#FF7A00;}
 .word-card .mini-spk{display:none;}
@@ -691,7 +692,20 @@ function renderWords(data){
   });
   requestAnimationFrame(function(){ requestAnimationFrame(fitResultCards); });
 }
-function addHistory(ch){ histList = histList.filter(function(x){ return x.c !== ch; }); histList.unshift({c:ch, t:Date.now()}); if(histList.length > 50) histList.pop(); saveHistory(); renderHistCount(); }
+function addHistory(ch){ histList = histList.filter(function(x){ return x.c !== ch; }); histList.unshift({c:ch, t:Date.now()}); if(histList.length > 50) histList.pop(); saveHistory(); // 按压反馈：iOS Safari 的 :active 不可靠，用 pointerdown/up 加 pressed 类保证点击有动效
+document.addEventListener("pointerdown", function(e){
+  var t = e.target.closest(".char-card,.word-card,#detailChar,.stroke-cell");
+  if(t){ t.classList.add("pressed"); }
+}, {passive:true});
+document.addEventListener("pointerup", function(e){
+  var t = e.target.closest(".char-card,.word-card,#detailChar,.stroke-cell");
+  if(t){ t.classList.remove("pressed"); }
+}, {passive:true});
+document.addEventListener("pointercancel", function(e){
+  var t = e.target.closest(".char-card,.word-card,#detailChar,.stroke-cell");
+  if(t){ t.classList.remove("pressed"); }
+}, {passive:true});
+renderHistCount(); }
 function renderHistCount(){ $("histCount").textContent = histList.length ? "（"+histList.length+"）" : ""; var r = $("resHistCount"); if(r) r.textContent = histList.length ? "（"+histList.length+"）" : ""; }
 function renderHistory(){
   var box = $("historyList"); box.innerHTML = "";
