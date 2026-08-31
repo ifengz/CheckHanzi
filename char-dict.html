@@ -455,6 +455,29 @@ function speak(text, btn){
   }
   // 朗读缓存：同一个字第二次点直接播，零延迟
   if(ttsCache[text]){ playTTSSamples(ttsCache[text].samples, ttsCache[text].sampleRate); return; }
+  // 云端 TTS 优先（edge-tts 微软晓晓，免费无限高质量）
+  if(!window.__speakCloudDisabled){
+    var x = new XMLHttpRequest(); x.open("GET","/api/tts?text="+encodeURIComponent(text),true); x.responseType="arraybuffer"; x.timeout=6000;
+    x.onload = function(){
+      if(x.status===200 && x.response && x.response.byteLength>500){
+        try{
+          playing(true); var b = x.response;
+          audioCtx.decodeAudioData(b).then(function(buf){
+            playTTSSamples(buf.getChannelData(0), buf.sampleRate); ttsCache[text] = {samples:buf.getChannelData(0), sampleRate:buf.sampleRate};
+          }).catch(function(){ playing(false); speakLocal(text,btn); });
+        }catch(e){ playing(false); speakLocal(text,btn); }
+      } else { speakLocal(text,btn); }
+    };
+    x.onerror = function(){ speakLocal(text,btn); };
+    x.ontimeout = function(){ speakLocal(text,btn); };
+    x.send(); return;
+  }
+  function speakLocal(t,b){ if(!ttsWorker){ systemSpeak(); return; }
+    try{ try{ speechSynthesis.cancel(); }catch(e){}
+      if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc = null; }
+      if(b) b.classList.add("playing"); else if(t) playing(true); ttsWorker.postMessage({type:"generate", text: t, sid: 0, speed: 1.0});
+    }catch(e){ console.error(e); playing(false); systemSpeak(); }
+  }
   if(!ttsWorker){ systemSpeak(); return; }
   try{
     try{ speechSynthesis.cancel(); }catch(e){}
@@ -534,6 +557,30 @@ function recognizeAudio(samples){
       var text = (result && result.text) ? result.text.trim() : "";
       stream.free(); resolve(text);
     }catch(e){ console.error(e); resolve(""); }
+  });
+}
+function floatToWav(samples, sr){
+  var buf = new ArrayBuffer(44 + samples.length*2), v = new DataView(buf);
+  function ws(o, s){ for(var i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); }
+  ws(0,"RIFF"); v.setUint32(4,36+samples.length*2,true); ws(8,"WAVE"); ws(12,"fmt ");
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,sr,true); v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+  ws(36,"data"); v.setUint32(40,samples.length*2,true);
+  for(var i=0;i<samples.length;i++){ var s=Math.max(-1,Math.min(1,samples[i])); v.setInt16(44+i*2,s<0?s*0x8000:s*0x7FFF,true); }
+  return new Blob([buf],{type:"audio/wav"});
+}
+function cloudRecognize(samples){
+  return new Promise(function(r){
+    var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
+    var fd = new FormData(); fd.append("file", floatToWav(samples, audioCtx.sampleRate), "audio.wav");
+    x.onload = function(){ try{ var d=JSON.parse(x.responseText); if(d.text) r(d.text); else r(""); }catch(e){ r(""); } };
+    x.onerror = function(){ r(""); };
+    x.ontimeout = function(){ r(""); };
+    // 云端失败时自动回退本地
+    var fallback = function(){ recognizeAudio(samples).then(r); };
+    var orig = x.onload; x.onload = function(){ try{ var d=JSON.parse(x.responseText); if(d.text && d.text.trim()){ r(d.text.trim()); return; } }catch(e){} fallback(); };
+    x.onerror = fallback; x.ontimeout = fallback;
+    x.send(fd);
   });
 }
 function stripTone(s){ return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace("ü","v"); }
@@ -794,7 +841,7 @@ function endHold(autoStop){
   $("voiceSheet").classList.add("show"); $("bubble").classList.remove("canceling");
   $("stateIcon").textContent = "🔍"; $("stateTxt").textContent = "识别中…";
   $("wave").style.display = "none"; $("stateIcon").style.display = "block"; $("voiceTip").textContent = "正在识别你读的字…";
-  recognizeAudio(samples).then(function(text){
+  cloudRecognize(samples).then(function(text){
     $("voiceSheet").classList.remove("show");
     if(text) handleVoiceResult(text); else toast("没听清，再按一次试试");
   });
