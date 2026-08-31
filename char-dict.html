@@ -260,7 +260,9 @@ function toast(msg){
   toastTimer = setTimeout(function(){ t.style.display = "none"; }, 2000);
 }
 var engine = { asrReady:false, ttsReady:false, asrLoading:false, ttsLoading:false, module:null };
-var ASSET_VER = "v6"; // 资源版本号：改版后加号，强制浏览器（尤其 iPad Safari）重新下载，避免缓存旧文件
+var cloudASR = false; // 云端识别是否可用
+var cloudTTS = false; // 云端朗读是否可用
+var ASSET_VER = "v7"; // 资源版本号：改版后加号，强制浏览器（尤其 iPad Safari）重新下载，避免缓存旧文件
 var engineActive = null;
 function fetchModel(url, label, onProgress){
   return new Promise(function(resolve, reject){
@@ -577,10 +579,19 @@ function cloudRecognize(samples){
     var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
     var fd = new FormData(); fd.append("file", floatToWav(samples, audioCtx.sampleRate), "audio.wav");
     x.onload = function(){ try{ var d=JSON.parse(x.responseText); if(d.text) r(d.text); else r(""); }catch(e){ r(""); } };
-    x.onerror = function(){ r(""); };
-    x.ontimeout = function(){ r(""); };
-    // 云端失败时自动回退本地
-    var fallback = function(){ recognizeAudio(samples).then(r); };
+    x.onerror = function(){ fallback(); };
+    x.ontimeout = function(){ fallback(); };
+    // 云端失败时自动回退本地（本地引擎未就绪则按需加载）
+    var fallback = function(){
+      if(engine.asrReady){ recognizeAudio(samples).then(r); return; }
+      if(!engine.asrLoading && !engine.asrReady){ initASREngine(); }
+      var tries = 0;
+      var t = setInterval(function(){
+        tries++;
+        if(engine.asrReady){ clearInterval(t); recognizeAudio(samples).then(r); }
+        else if(tries > 90){ clearInterval(t); r(""); }
+      }, 1000);
+    };
     var orig = x.onload; x.onload = function(){ try{ var d=JSON.parse(x.responseText); if(d.text && d.text.trim()){ r(d.text.trim()); return; } }catch(e){} fallback(); };
     x.onerror = fallback; x.ontimeout = fallback;
     x.send(fd);
@@ -816,7 +827,7 @@ function setCancelUI(on){
 }
 function startHold(){
   if(rec.active) return;
-  if(!engine.asrReady){ toast("语音识别还在准备中，请稍等…"); return; }
+  if(!engine.asrReady && !cloudASR){ toast("语音识别还在准备中，请稍等…"); return; }
   rec.active = true; rec.cancelled = false; rec.startTime = Date.now(); ensureAudio();
   if(rec.btn) rec.btn.classList.add("holding"); $("voiceSheet").classList.add("show"); setCancelUI(false); startWave();
   startRecording().then(function(recorderObj){
@@ -1049,11 +1060,20 @@ renderHistCount();
 document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
 var crossIsolated = (typeof window.crossOriginIsolated !== "undefined" && window.crossOriginIsolated);
 if(!crossIsolated){ $("warnBanner").style.display = "block"; setTimeout(function(){ if(engine.asrReady || loadTimeoutDone) return; loadTimeoutDone = true; showLoadErr("⚠️ 语音识别无法启动<br>这个页面缺少跨域隔离头（COOP/COEP），语音引擎启动被浏览器拦截。<br>本地开发：用项目里的 dev-server.py 启动，访问 http://127.0.0.1:8000/char-dict.html<br>部署到宝塔：按 README 配置三个响应头后再打开。"); }, 6000); }
-initASREngine();
+// 探测云端语音代理：可用则跳过本地 78MB 模型下载（页面秒开），断网/失败时按需加载本地回退
+fetch("/api/ping", {cache:"no-store"}).then(function(res){ return res.json(); }).then(function(d){
+  cloudASR = !!(d && d.ok && d.asr);
+  cloudTTS = !!(d && d.ok && d.tts);
+  if(cloudASR || cloudTTS){ hideLoadOverlay(); }
+  if(!cloudASR && !engine.asrReady && !engine.asrLoading){ initASREngine(); }
+  if(!cloudTTS && !engine.ttsReady && !engine.ttsLoading){ setTimeout(function(){ initTTSEngine(); }, 6000); }
+}).catch(function(){
+  // 云端不可达：走本地引擎
+  initASREngine();
+  setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
+});
 // 后台预加载笔顺数据（9MB），让详情页首次点击零延迟
 setTimeout(function(){ if(!strokeBundle) fetchJSON("models/strokes/stroke_data.json", function(d){ strokeBundle = d; }, function(){}); }, 2000);
-// 后台预加载 TTS（等 ASR 稳定后）——用户首次点击就能直接播放，无需等待
-setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
 </script>
 </body>
 </html>
