@@ -259,10 +259,11 @@ function toast(msg){
   toastTimer = setTimeout(function(){ t.style.display = "none"; }, 2000);
 }
 var engine = { asrReady:false, ttsReady:false, asrLoading:false, ttsLoading:false, module:null };
+var ASSET_VER = "v6"; // 资源版本号：改版后加号，强制浏览器（尤其 iPad Safari）重新下载，避免缓存旧文件
 var engineActive = null;
 function fetchModel(url, label, onProgress){
   return new Promise(function(resolve, reject){
-    var x = new XMLHttpRequest(); x.open("GET", url, true); x.responseType = "arraybuffer";
+    var x = new XMLHttpRequest(); x.open("GET", url + (url.indexOf("?") < 0 ? "?v=" : "&v=") + ASSET_VER, true); x.responseType = "arraybuffer";
     x.onload = function(){ if(x.status===200 && x.response) resolve(x.response); else reject(new Error("HTTP "+x.status)); };
     x.onerror = function(){ reject(new Error("网络错误")); };
     x.ontimeout = function(){ reject(new Error("超时")); };
@@ -273,7 +274,7 @@ function fetchModel(url, label, onProgress){
 }
 function loadScript(src){
   return new Promise(function(resolve, reject){
-    var s = document.createElement("script"); s.src = src; s.onload = resolve;
+    var s = document.createElement("script"); s.src = src + (src.indexOf("?") < 0 ? "?v=" : "&v=") + ASSET_VER; s.onload = resolve;
     s.onerror = function(){ reject(new Error("加载失败: "+src)); };
     document.head.appendChild(s);
   });
@@ -312,8 +313,8 @@ function initASREngine(){
       window.Module = {
         getPreloadedPackage: function(name, size){ return new ArrayBuffer(4096); },
         locateFile: function(path, dir){
-          if(path.endsWith(".wasm")) return "models/asr/"+path;
-          if(path.endsWith(".data")) return "models/asr/"+path;
+          if(path.endsWith(".wasm")) return "models/asr/"+path+"?v="+ASSET_VER;
+          if(path.endsWith(".data")) return "models/asr/"+path+"?v="+ASSET_VER;
           return dir + path;
         },
         setStatus: function(s){ if(s) setLoadProgress(6, s); },
@@ -351,7 +352,7 @@ function initTTSEngine(){
   engine.ttsPromise = new Promise(function(resolve, reject){
     try{
       toast("正在准备朗读语音…");
-      ttsWorker = new Worker("models/tts/sherpa-onnx-tts.worker.js");
+      ttsWorker = new Worker("models/tts/sherpa-onnx-tts.worker.js?v=" + ASSET_VER);
       ttsWorker.onmessage = async function(ev){
         var d = ev.data;
         if(d.type === "sherpa-onnx-tts-wasm-ready"){
@@ -793,14 +794,13 @@ function handleVoiceResult(text){
   var text2 = text;
   var tm = text.match(/第([一二三四])声/);
   if(tm){ toneNum = "一二三四".indexOf(tm[1]) + 1; text2 = text.replace(/第[一二三四]声/g, " "); }
-  // 智能指字解析：理解"X的X"模式（饭碗的碗→碗）、拼音提示（wan）、重复强调（孩子重复说的字就是目标）
-  var candidates = parseVoiceIntent(text2);
-  if(candidates.length){
-    if(toneNum){ candidates = filterByTone(candidates, toneNum); }
-    if(shouldUseSelectMode(text)){ showSelectMode(text); return; }
-    showVoiceResults(candidates, text, toneNum);
-    return;
-  }
+  // 提取句中所有汉字（去重）
+  var hanzi = [];
+  for(var i=0;i<text2.length;i++){ var ch = text2[i]; if(/[\u4e00-\u9fff]/.test(ch) && hanzi.indexOf(ch)===-1) hanzi.push(ch); }
+  // 一句话（≥2 个汉字）→ 直接把整句话的所有字列出来让小孩点选要查哪个
+  if(hanzi.length >= 2){ showSelectMode(text2); return; }
+  // 单个字 → 直接查它
+  if(hanzi.length === 1){ showVoiceResults(hanzi, text, toneNum); return; }
   // 纯拼音兜底（含带声调拼音 hào）
   var toned = stripTone(cleaned).replace(/[^a-zv]/g,"");
   var key = toned;
