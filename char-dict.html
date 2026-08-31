@@ -910,6 +910,9 @@ function endHold(autoStop){
     if(rec.btn) rec.btn.classList.remove("holding");
     rec.autoMode = true;
     setRecState("listen");
+    // 自动录音模式：手指已放开，提示"正在听"，再点一下取消
+    var wt2 = rec.btn.id === "recBtn" ? rec.btn.querySelector(".rec-txt") : $("pillTxt");
+    if(wt2) wt2.textContent = "正在听…";
     if(rec.recorderObj){
       rec.autoTimer = setTimeout(function(){
         if(rec.autoMode === false) return;
