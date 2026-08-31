@@ -1,0 +1,18 @@
+# 语音模型权重（scp 直传服务器，不进 git 仓库）
+#   引擎 glue/wasm/tokens/lexicon 等小文件进仓，只排除大的 .onnx 权重
+models/asr/paraformer.onnx
+models/tts/model.onnx
+
+# 旧模型备份
+models/tts-backup-aishell3/
+
+# 本地开发服务器与自签证书
+dev-server.py
+dev-server.crt
+dev-server.key
+
+# 开发模板（含 DICT/PINYIN/RADICALS 占位符）
+char-dict.template.html
+
+# 系统
+.DS_Store
