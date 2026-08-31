@@ -117,7 +117,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #wave{display:flex;align-items:center;gap:5px;height:clamp(36px,5vh,50px);}
 #wave i{width:7px;border-radius:4px;background:#FF9D3C;height:clamp(10px,2vh,14px);}
 #bubble .txt{font-size:clamp(16px,2.2vh,20px);font-weight:700;}
-#countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(48px,10vh,100px);font-weight:800;color:#FF7A00;line-height:1;z-index:2;pointer-events:none;}
 #bubble.canceling{background:#F5F0E8;}
 #bubble.canceling .txt{color:#B8A080;}
 #voiceTip{color:#fff;font-size:clamp(14px,1.8vh,16px);margin-top:clamp(12px,2vh,20px);letter-spacing:1px;}
@@ -228,7 +227,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 </div>
 
 <div id="voiceSheet">
-  <div id="bubble"><div class="state-icon" id="stateIcon">🎙️</div><div id="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="txt" id="stateTxt">松开 查字</div><div id="countdown" style="display:none;font-size:clamp(48px,8vh,80px);font-weight:800;color:#FF7A00;line-height:1;"></div></div>
+  <div id="bubble"><div class="state-icon" id="stateIcon">🎙️</div><div id="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="txt" id="stateTxt">松开 查字</div></div>
   <div id="voiceTip">手指上滑 取消</div>
 </div>
 
@@ -731,7 +730,7 @@ function bindRecButton(btn){
   }, {passive:false});
   btn.addEventListener("pointerup", function(e){
     e.preventDefault();
-    if(rec.active && Date.now() - rec.startTime < 400){ endHold(false, true); } else { endHold(); }
+    endHold();
   }, {passive:false});
   btn.addEventListener("pointercancel", function(e){ e.preventDefault(); endHold(); }, {passive:false});
   btn.addEventListener("pointermove", function(e){ if(!rec.active) return; var moved = rec.startY - e.clientY; setCancelUI(moved > 60); }, {passive:true});
@@ -750,7 +749,7 @@ function setCancelUI(on){
 function startHold(){
   if(rec.active) return;
   if(!engine.asrReady){ toast("语音识别还在准备中，请稍等…"); return; }
-  rec.active = true; rec.cancelled = false; rec.startTime = Date.now(); rec.isClickMode = false; ensureAudio();
+  rec.active = true; rec.cancelled = false; rec.startTime = Date.now(); ensureAudio();
   if(rec.btn) rec.btn.classList.add("holding"); $("voiceSheet").classList.add("show"); setCancelUI(false); startWave();
   startRecording().then(function(recorderObj){
     if(!rec.active){ try{ recorderObj.stop(); }catch(e){} return; }
@@ -761,30 +760,11 @@ function startHold(){
     if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show"); toast(err.message || "无法使用麦克风");
   });
 }
-function endHold(autoStop, clickMode){
+function endHold(autoStop){
   if(!rec.active && !autoStop) return;
-  clearTimeout(rec.timer); clearTimeout(rec.timeoutTimer); clearInterval(rec.countdownTimer); $("countdown").style.display = "none"; $("stateTxt").style.display = "block";
+  clearTimeout(rec.timer); clearTimeout(rec.timeoutTimer);
   var dur = Date.now() - rec.startTime;
-  // 点击模式：快速点一下，进入 3 秒自动录音（等孩子说完）
-  if(clickMode && rec.recorderObj && !rec.autoTimer){
-    $("stateTxt").textContent = "录音中…";
-    $("voiceTip").textContent = "说完后会自动识别";
-    $("stateIcon").textContent = "🔴";
-    $("wave").style.display = "none";
-    if(rec.btn) rec.btn.classList.remove("holding");
-    // 倒计时 3-2-1（隐藏"录音中…"文字，避免与数字重叠）
-    var cd = $("countdown"); cd.style.display = "flex"; cd.textContent = "3";
-    $("stateTxt").style.display = "none";
-    var sec = 3;
-    rec.countdownTimer = setInterval(function(){
-      sec--;
-      if(sec > 0) cd.textContent = sec;
-      else { clearInterval(rec.countdownTimer); cd.style.display = "none"; $("stateTxt").style.display = "block"; }
-    }, 1000);
-    rec.autoTimer = setTimeout(function(){ rec.autoTimer = null; endHold(true); }, 3000);
-    return;
-  }
-  // 按住说话：松开时结束；或点击模式 3 秒计时结束
+  // 按住说话：松开时结束；松开太快（<500ms）提示按住不放
   if(!autoStop && dur < 500){ stopWave(); if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show"); rec.active = false; toast("按住不放，再说一遍"); return; }
   stopWave(); if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show");
   rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
