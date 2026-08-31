@@ -631,6 +631,7 @@ function lookup(raw){
 }
 function showResultsPage(chars, toneNum){
   $("home").style.display = "none"; $("detail").classList.remove("show"); $("history").classList.remove("show"); $("results").classList.add("show");
+  prefetchTTSList(chars, 14); // 提前下好候选字读音，点的时候秒播
   var box = $("resultChars"); box.innerHTML = "";
   chars.forEach(function(ch){
     var data = DICT[ch]; if(!data) return;
@@ -682,6 +683,8 @@ function fitResultCards(){
 window.addEventListener("resize", function(){ if($("results").classList.contains("show")) requestAnimationFrame(fitResultCards); });
 function renderDetail(toneNum){
   var data = DICT[current]; if(!data) return;
+  prefetchTTS(current);
+  if(data.w && data.w.length){ prefetchTTSList(data.w, 12); } // 组词读音预加载
   $("home").style.display = "none"; $("history").classList.remove("show"); $("results").classList.remove("show"); $("detail").classList.add("show");
   $("detailBody").scrollTop = 0; $("strokes").innerHTML = "";
   $("detailChar").textContent = current;
@@ -825,6 +828,31 @@ function startRecTips(el){
   rec.tipTimer = setInterval(function(){ i = (i+1) % recTips.length; el.textContent = recTips[i]; }, 800);
 }
 function stopRecTips(){ if(rec.tipTimer){ clearInterval(rec.tipTimer); rec.tipTimer = null; } }
+// 预加载读音：页面显示时后台提前下好音频，孩子点的时候秒播（云端失败静默忽略，不影响点击时的正常兜底）
+var prefetching = {};
+function prefetchTTS(text){
+  if(!text || ttsCache[text] || prefetching[text] || window.__speakCloudDisabled) return;
+  prefetching[text] = 1;
+  try{
+    var x = new XMLHttpRequest();
+    x.open("GET","/api/tts?text="+encodeURIComponent(text),true); x.responseType="arraybuffer"; x.timeout=8000;
+    x.onload = function(){
+      delete prefetching[text];
+      if(x.status===200 && x.response && x.response.byteLength>500){
+        try{ ensureAudio(); audioCtx.decodeAudioData(x.response).then(function(buf){
+          ttsCache[text] = {samples:buf.getChannelData(0), sampleRate:buf.sampleRate};
+        }).catch(function(){}); }catch(e){}
+      }
+    };
+    x.onerror = function(){ delete prefetching[text]; };
+    x.ontimeout = function(){ delete prefetching[text]; };
+    x.send();
+  }catch(e){ delete prefetching[text]; }
+}
+function prefetchTTSList(list, limit){
+  if(!list || !list.length) return;
+  list.slice(0, limit||12).forEach(function(t,i){ setTimeout(function(){ prefetchTTS(t); }, i*120); });
+}
 // 给任意按钮绑定"按住说话"录音（主页大按钮、结果页/详情页头部按钮通用）
 function bindRecButton(btn){
   if(!btn) return;

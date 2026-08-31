@@ -9,7 +9,7 @@
 无需任何 API key，全部跑在服务器本地。断网/服务不可用时前端自动回退本地引擎。
 """
 
-import os, io, asyncio, threading, time
+import os, io, hashlib, asyncio, threading, time
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
 
@@ -17,6 +17,9 @@ app = Flask(__name__)
 CORS(app)
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5001"))
+# TTS 磁盘缓存：同一段文字的音频只生成一次，之后毫秒级返回
+TTS_CACHE_DIR = os.environ.get("TTS_CACHE_DIR", "/opt/chazi-voice/tts-cache")
+os.makedirs(TTS_CACHE_DIR, exist_ok=True)
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # base 快(2s) + opencc 转简体
 
 # ── faster-whisper 模型（常驻内存，启动时加载一次）──────────────
@@ -87,10 +90,24 @@ def tts_handler():
         return jsonify({"error": "缺少 text 参数"}), 400
     if len(text) > 200:
         return jsonify({"error": "文本过长"}), 400
+    # 命中磁盘缓存直接返回（毫秒级）
+    key = hashlib.md5(text.encode("utf-8")).hexdigest()
+    cache_path = os.path.join(TTS_CACHE_DIR, key + ".mp3")
+    if os.path.exists(cache_path) and os.path.getsize(cache_path) > 500:
+        try:
+            with open(cache_path, "rb") as f:
+                return Response(f.read(), mimetype="audio/mpeg")
+        except Exception:
+            pass
     try:
         mp3_data = asyncio.run(edge_tts_generate(text))
         if not mp3_data:
             return jsonify({"error": "生成失败"}), 500
+        try:
+            with open(cache_path, "wb") as f:
+                f.write(mp3_data)
+        except Exception:
+            pass
         return Response(mp3_data, mimetype="audio/mpeg")
     except Exception as e:
         return jsonify({"error": str(e)}), 500
