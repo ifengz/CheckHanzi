@@ -832,8 +832,30 @@ function endHold(autoStop){
   if(!rec.active && !autoStop) return;
   clearTimeout(rec.timer); clearTimeout(rec.timeoutTimer);
   var dur = Date.now() - rec.startTime;
-  // 按住说话：松开时结束；松开太快（<500ms）提示按住不放
-  if(!autoStop && dur < 500){ stopWave(); if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show"); rec.active = false; toast("按住不放，再说一遍"); return; }
+  // 快速点一下（<500ms）→ 自动录音模式，说一句话自动识别
+  if(!autoStop && dur < 500){
+    stopWave(); rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
+    if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show");
+    toast("听你说…"); // 立即开始录音（已由 startHold 启动），3秒后自动结束
+    if(rec.recorderObj){
+      rec.autoTimer = setTimeout(function(){
+        if(rec.active) return; // 已被其他逻辑处理
+        rec.autoTimer = null;
+        var recorderObj = rec.recorderObj; rec.recorderObj = null;
+        if(!recorderObj) return;
+        var samples = recorderObj.stop();
+        if(samples.length < 1600) return;
+        $("voiceSheet").classList.add("show"); $("bubble").classList.remove("canceling");
+        $("stateIcon").textContent = "🔍"; $("stateTxt").textContent = "识别中…";
+        $("wave").style.display = "none"; $("stateIcon").style.display = "block"; $("voiceTip").textContent = "正在识别你读的字…";
+        cloudRecognize(samples).then(function(text){
+          $("voiceSheet").classList.remove("show");
+          if(text) handleVoiceResult(text); else toast("没听清，再按一次试试");
+        });
+      }, 3000);
+    }
+    return;
+  }
   stopWave(); if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show");
   rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
   if(rec.cancelled){ if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} } rec.recorderObj = null; return; }
