@@ -111,13 +111,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .h-item .mini-spk.playing{background:#4CAF7D;border-color:#4CAF7D;color:#fff;}
 .h-empty{text-align:center;color:#B8A080;font-size:clamp(16px,2.2vh,18px);margin-top:clamp(30px,5vh,60px);line-height:2;}
 /* 语音浮层 */
-#voiceSheet{position:fixed;left:0;right:0;top:0;bottom:0;z-index:50;background:rgba(45,42,38,.55);display:none;flex-direction:column;align-items:center;justify-content:center;}
+#voiceSheet{position:fixed;left:0;right:0;top:0;bottom:0;z-index:50;background:rgba(45,42,38,.8);display:none;flex-direction:column;align-items:center;justify-content:center;}
 #voiceSheet.show{display:flex;}
 #bubble{width:clamp(160px,22vh,240px);height:clamp(160px,22vh,240px);border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;box-shadow:0 20px 60px rgba(0,0,0,.15);}
 #bubble .state-icon{font-size:clamp(40px,6vh,60px);line-height:1;}
 #wave{display:flex;align-items:center;gap:5px;height:clamp(36px,5vh,50px);}
 #wave i{width:7px;border-radius:4px;background:#FF9D3C;height:clamp(10px,2vh,14px);}
 #bubble .txt{font-size:clamp(16px,2.2vh,20px);font-weight:700;}
+#spinRing{width:clamp(70px,11vh,110px);height:clamp(70px,11vh,110px);border-radius:50%;border:7px solid #F0E0C8;border-top-color:#FF9D3C;animation:spin .9s linear infinite;display:none;margin-bottom:6px;}
+@keyframes spin{to{transform:rotate(360deg);}}
 #bubble.canceling{background:#F5F0E8;}
 #bubble.canceling .txt{color:#B8A080;}
 #voiceTip{color:#fff;font-size:clamp(14px,1.8vh,16px);margin-top:clamp(12px,2vh,20px);letter-spacing:1px;}
@@ -228,7 +230,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 </div>
 
 <div id="voiceSheet">
-  <div id="bubble"><div class="state-icon" id="stateIcon">🎙️</div><div id="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="txt" id="stateTxt">松开 查字</div></div>
+  <div id="bubble"><div id="spinRing"></div><div class="state-icon" id="stateIcon">🎙️</div><div id="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="txt" id="stateTxt">松开 查字</div></div>
   <div id="voiceTip">手指上滑 取消</div>
 </div>
 
@@ -828,7 +830,7 @@ function setCancelUI(on){
 function startHold(){
   if(rec.active) return;
   if(!engine.asrReady && !cloudASR){ toast("语音识别还在准备中，请稍等…"); return; }
-  rec.active = true; rec.cancelled = false; rec.startTime = Date.now(); ensureAudio();
+  rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.startTime = Date.now(); ensureAudio();
   if(rec.btn) rec.btn.classList.add("holding"); $("voiceSheet").classList.add("show"); setCancelUI(false); startWave();
   startRecording().then(function(recorderObj){
     if(!rec.active){ try{ recorderObj.stop(); }catch(e){} return; }
@@ -843,22 +845,28 @@ function endHold(autoStop){
   if(!rec.active && !autoStop) return;
   clearTimeout(rec.timer); clearTimeout(rec.timeoutTimer);
   var dur = Date.now() - rec.startTime;
-  // 快速点一下（<500ms）→ 自动录音模式，说一句话自动识别
+  // 快速点一下（<500ms）→ 自动录音模式：显示"正在听"，3秒后自动识别，点遮罩可取消
   if(!autoStop && dur < 500){
     stopWave(); rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
-    if(rec.btn) rec.btn.classList.remove("holding"); $("voiceSheet").classList.remove("show");
-    toast("听你说…"); // 立即开始录音（已由 startHold 启动），3秒后自动结束
+    if(rec.btn) rec.btn.classList.remove("holding");
+    rec.autoMode = true; // 自动录音模式标记
+    $("bubble").classList.remove("canceling");
+    $("stateIcon").style.display = "none"; $("spinRing").style.display = "none";
+    $("wave").style.display = "flex"; startWave();
+    $("stateTxt").textContent = "正在听…";
+    $("voiceTip").textContent = "点一下 取消";
+    $("voiceSheet").classList.add("show");
     if(rec.recorderObj){
       rec.autoTimer = setTimeout(function(){
-        if(rec.active) return; // 已被其他逻辑处理
-        rec.autoTimer = null;
+        if(rec.autoMode === false) return; // 已被点击取消
+        rec.autoMode = false; rec.autoTimer = null;
+        stopWave();
         var recorderObj = rec.recorderObj; rec.recorderObj = null;
-        if(!recorderObj) return;
+        if(!recorderObj){ $("voiceSheet").classList.remove("show"); return; }
         var samples = recorderObj.stop();
-        if(samples.length < 1600) return;
-        $("voiceSheet").classList.add("show"); $("bubble").classList.remove("canceling");
+        if(samples.length < 1600){ $("voiceSheet").classList.remove("show"); toast("没听到声音，请再试一次"); return; }
         $("stateIcon").textContent = "🔍"; $("stateTxt").textContent = "识别中…";
-        $("wave").style.display = "none"; $("stateIcon").style.display = "block"; $("voiceTip").textContent = "正在识别你读的字…";
+        $("wave").style.display = "none"; $("stateIcon").style.display = "block"; $("spinRing").style.display = "block"; $("voiceTip").textContent = "正在识别你读的字…";
         cloudRecognize(samples).then(function(text){
           $("voiceSheet").classList.remove("show");
           if(text) handleVoiceResult(text); else toast("没听清，再按一次试试");
@@ -882,6 +890,15 @@ function endHold(autoStop){
     if(text) handleVoiceResult(text); else toast("没听清，再按一次试试");
   });
 }
+// 点击录音遮罩：自动录音模式下取消
+$("voiceSheet").addEventListener("click", function(){
+  if(!rec.autoMode) return;
+  rec.autoMode = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
+  stopWave(); rec.active = false;
+  if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} rec.recorderObj = null; }
+  $("voiceSheet").classList.remove("show");
+  toast("已取消");
+});
 function startWave(){
   var bars = document.querySelectorAll("#wave i");
   rec.animTimer = setInterval(function(){ bars.forEach(function(b){ b.style.height = (8+Math.round(Math.random()*35))+"px"; }); }, 110);

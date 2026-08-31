@@ -17,7 +17,7 @@ app = Flask(__name__)
 CORS(app)
 
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "5001"))
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")  # small 准确，base 更快
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # base 快(2s) + opencc 转简体
 
 # ── faster-whisper 模型（常驻内存，启动时加载一次）──────────────
 _model = None
@@ -33,7 +33,7 @@ def get_model():
     return _model
 
 def whisper_asr(wav_bytes: bytes) -> str:
-    """用 faster-whisper 识别音频，返回文本"""
+    """用 faster-whisper 识别音频，返回简体中文文本"""
     model = get_model()
     segments, _info = model.transcribe(
         io.BytesIO(wav_bytes),
@@ -42,6 +42,12 @@ def whisper_asr(wav_bytes: bytes) -> str:
         beam_size=1,
     )
     text = "".join(s.text for s in segments).strip()
+    # faster-whisper base 可能输出繁体（蘋果），转成简体
+    try:
+        from opencc import OpenCC
+        text = OpenCC("t2s").convert(text)
+    except Exception:
+        pass
     return text
 
 
