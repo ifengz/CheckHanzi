@@ -47,7 +47,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #detailBody{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(2px,.4vh,8px);overflow:hidden;padding:0 clamp(10px,1.6vw,16px) clamp(4px,.8vh,8px);justify-content:center;}
 .char-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:clamp(14px,2vh,28px);border:3px solid #F0E0C8;padding:clamp(2px,.4vh,8px) clamp(12px,2vw,16px);flex:1;min-height:0;max-height:min(44vh,430px);box-shadow:0 4px 16px rgba(0,0,0,.04);}
 #detailPinyin{font-size:clamp(18px,3vh,32px);color:#BB8C4F;font-weight:700;letter-spacing:6px;margin-bottom:clamp(1px,.3vh,6px);}
-#detailChar{font-size:min(30vh,320px);font-weight:700;line-height:1.05;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;}
+#detailChar{font-size:min(30vh,320px);font-weight:700;line-height:1.05;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;max-width:100%;overflow:hidden;white-space:nowrap;}
 #detailChar:active{transform:scale(.88);}
 #detailMeta{font-size:clamp(11px,1.6vh,14px);color:#C8BCA8;margin-top:clamp(1px,.3vh,4px);}
 #radSection{flex-shrink:0;}
@@ -363,7 +363,7 @@ function initTTSEngine(){
           }catch(e){ console.error(e); toast("朗读语音加载失败，试试系统朗读"); reject(e); }
         }
         if(d.type === "sherpa-onnx-tts-ready"){ engine.ttsReady = true; engine.ttsLoading = false; toast("朗读语音已就绪 🎉"); resolve(); var q = ttsPending; ttsPending = []; q.forEach(function(item){ speak(item.text, item.btn); }); }
-        if(d.type === "sherpa-onnx-tts-result"){ playTTSSamples(d.samples, d.sampleRate); }
+        if(d.type === "sherpa-onnx-tts-result"){ if(window.__currentTTSText) ttsCache[window.__currentTTSText] = {samples:d.samples, sampleRate:d.sampleRate}; playTTSSamples(d.samples, d.sampleRate); }
         if(d.type === "error"){ console.error("TTS worker error:", d.message); if(window.__ttsPlayingBtn){ var b = window.__ttsPlayingBtn; window.__ttsPlayingBtn = null; b.classList.remove("playing"); } if(!engine.ttsReady){ reject(new Error(d.message)); } }
       };
       ttsWorker.onerror = function(e){ console.error("TTS worker error:", e.message); if(window.__ttsPlayingBtn){ var b = window.__ttsPlayingBtn; window.__ttsPlayingBtn = null; b.classList.remove("playing"); } if(!engine.ttsReady){ toast("朗读语音加载失败"); reject(new Error("worker error")); } };
@@ -434,6 +434,7 @@ function playStrokeSequence(cell, i, data){
     g.style.visibility = "visible";
   }, delay + 400);
 }
+var ttsCache = {}; // 朗读缓存：同字第二次点直接播，无需重新生成
 function speak(text, btn){
   ensureAudio();
   var playing = function(on){ if(btn) btn.classList.toggle("playing", on); };
@@ -451,12 +452,14 @@ function speak(text, btn){
   if(!engine.ttsReady){ playing(true); if(engine.ttsLoading){ toast("正在加载语音…"); ttsPending.push({text, btn}); return; }
     initTTSEngine().then(function(){ if(engine.ttsReady) speak(text, btn); else{ playing(false); systemSpeak(); } }).catch(function(){ playing(false); systemSpeak(); }); return;
   }
+  // 朗读缓存：同一个字第二次点直接播，零延迟
+  if(ttsCache[text]){ playTTSSamples(ttsCache[text].samples, ttsCache[text].sampleRate); return; }
   if(!ttsWorker){ systemSpeak(); return; }
   try{
     try{ speechSynthesis.cancel(); }catch(e){}
     if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc = null; }
     playing(true); document.querySelectorAll(".playing").forEach(function(el){ if(el !== btn) el.classList.remove("playing"); }); window.__ttsPlayingBtn = btn;
-    ttsWorker.postMessage({type:"generate", text: text, sid: 0, speed: 1.0});
+    window.__currentTTSText = text; ttsWorker.postMessage({type:"generate", text: text, sid: 0, speed: 1.0});
   }catch(e){ console.error(e); playing(false); systemSpeak(); }
 }
 function playTTSSamples(samples, sampleRate){
@@ -961,6 +964,8 @@ document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true
 var crossIsolated = (typeof window.crossOriginIsolated !== "undefined" && window.crossOriginIsolated);
 if(!crossIsolated){ $("warnBanner").style.display = "block"; setTimeout(function(){ if(engine.asrReady || loadTimeoutDone) return; loadTimeoutDone = true; showLoadErr("⚠️ 语音识别无法启动<br>这个页面缺少跨域隔离头（COOP/COEP），语音引擎启动被浏览器拦截。<br>本地开发：用项目里的 dev-server.py 启动，访问 http://127.0.0.1:8000/char-dict.html<br>部署到宝塔：按 README 配置三个响应头后再打开。"); }, 6000); }
 initASREngine();
+// 后台预加载笔顺数据（9MB），让详情页首次点击零延迟
+setTimeout(function(){ if(!strokeBundle) fetchJSON("models/strokes/stroke_data.json", function(d){ strokeBundle = d; }, function(){}); }, 2000);
 // 后台预加载 TTS（等 ASR 稳定后）——用户首次点击就能直接播放，无需等待
 setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
 </script>
