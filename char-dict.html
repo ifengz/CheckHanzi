@@ -475,7 +475,10 @@ function speak(text, btn){
   function speakLocal(t,b){ if(!ttsWorker){ systemSpeak(); return; }
     try{ try{ speechSynthesis.cancel(); }catch(e){}
       if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc = null; }
-      if(b) b.classList.add("playing"); else if(t) playing(true); ttsWorker.postMessage({type:"generate", text: t, sid: 0, speed: 1.0});
+      if(b) b.classList.add("playing"); else if(t) playing(true);
+      document.querySelectorAll(".playing").forEach(function(el){ if(el !== b && el !== btn) el.classList.remove("playing"); });
+      window.__ttsPlayingBtn = b || btn; window.__currentTTSText = t;
+      ttsWorker.postMessage({type:"generate", text: t, sid: 0, speed: 1.0});
     }catch(e){ console.error(e); playing(false); systemSpeak(); }
   }
   if(!ttsWorker){ systemSpeak(); return; }
