@@ -598,7 +598,9 @@ function floatToWav(samples, sr){
 function cloudRecognize(samples){
   return new Promise(function(r){
     var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
-    var fd = new FormData(); fd.append("file", floatToWav(samples, audioCtx.sampleRate), "audio.wav");
+    // 先重采样到 16kHz 再上传：默认 audioCtx 是 48kHz，体积 3 倍，弱带宽下光上传就要几秒
+    var down = resample(samples, audioCtx.sampleRate, 16000);
+    var fd = new FormData(); fd.append("file", floatToWav(down, 16000), "audio.wav");
     x.onload = function(){ try{ var d=JSON.parse(x.responseText); if(d.text) r(d.text); else r(""); }catch(e){ r(""); } };
     x.onerror = function(){ fallback(); };
     x.ontimeout = function(){ fallback(); };

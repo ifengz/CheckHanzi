@@ -32,17 +32,24 @@ def get_model():
         with _model_lock:
             if _model is None:
                 from faster_whisper import WhisperModel
-                _model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+                _model = WhisperModel(
+                    WHISPER_MODEL,
+                    device="cpu",
+                    compute_type="int8",
+                    cpu_threads=min(8, os.cpu_count() or 4),  # 默认只开 4 线程，8 核用不满
+                    num_workers=2,  # 允许 2 个识别请求并行（多设备同时按住说话）
+                )
     return _model
 
-def whisper_asr(wav_bytes: bytes) -> str:
-    """用 faster-whisper 识别音频，返回简体中文文本"""
+def whisper_asr(wav_bytes: bytes):
+    """用 faster-whisper 识别音频，返回 (简体中文文本, 音频时长秒)"""
     model = get_model()
     segments, _info = model.transcribe(
         io.BytesIO(wav_bytes),
         language="zh",
         vad_filter=True,
         beam_size=1,
+        condition_on_previous_text=False,
     )
     text = "".join(s.text for s in segments).strip()
     # faster-whisper base 可能输出繁体（蘋果），转成简体
@@ -51,7 +58,7 @@ def whisper_asr(wav_bytes: bytes) -> str:
         text = OpenCC("t2s").convert(text)
     except Exception:
         pass
-    return text
+    return text, getattr(_info, "duration", 0.0)
 
 
 @app.route("/api/asr", methods=["POST"])
@@ -65,8 +72,8 @@ def asr_handler():
         return jsonify({"error": "音频数据过短"}), 400
     try:
         t0 = time.time()
-        text = whisper_asr(audio_data)
-        print(f"[asr] {time.time()-t0:.2f}s -> {text!r}", flush=True)
+        text, dur = whisper_asr(audio_data)
+        print(f"[asr] {time.time()-t0:.2f}s (音频 {dur:.1f}s) -> {text!r}", flush=True)
         return jsonify({"text": text})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
