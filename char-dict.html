@@ -548,21 +548,72 @@ function playTTSSamples(samples, sampleRate){
 }
 function ensureAudio(){ try{ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state === "suspended") audioCtx.resume(); }catch(e){} }
 var audioCtx = null; var recorder = null;
+// ── 麦克风常驻流 + 前置环形缓冲：消除 getUserMedia 冷启动延迟吞句首字的问题 ──
+// 孩子按下按钮才 getUserMedia 时，iPad 首次要 200-800ms，开头语音直接没了（"少字"主因）。
+// 方案：授权一次后流常驻，后台持续写最近 0.35s 到环形缓冲；正式录音 = 前置缓冲 + 按下之后的段。
+var micWarm = null;            // {stream, src, proc} 常驻
+var preroll = { buf: new Float32Array(16000), w: 0, filled: 0 }; // 16000 采样 = 1s 环形
+var PREROLL_MS = 350;          // 实际拼接的前置时长
+function ensureMicStream(){
+  return new Promise(function(resolve){
+    if(micWarm){ resolve(micWarm); return; }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ resolve(null); return; }
+    ensureAudio();
+    navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:true, noiseSuppression:true}})
+      .then(function(stream){
+        try{
+          var src = audioCtx.createMediaStreamSource(stream);
+          var proc = audioCtx.createScriptProcessor(2048, 1, 1);
+          proc.onaudioprocess = function(ev){
+            var d = ev.inputBuffer.getChannelData(0);
+            for(var i=0;i<d.length;i++){ preroll.buf[preroll.w] = d[i]; preroll.w = (preroll.w+1) % preroll.buf.length; }
+            if(preroll.filled < preroll.buf.length) preroll.filled += d.length;
+          };
+          src.connect(proc); proc.connect(audioCtx.destination);
+          micWarm = { stream: stream, src: src, proc: proc };
+          resolve(micWarm);
+        }catch(e){ try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e2){} resolve(null); }
+      }).catch(function(){ resolve(null); }); // 静默失败：等首次用户手势再试
+  });
+}
+function takePreroll(){
+  // 取最近 PREROLL_MS 毫秒的采样（按 audioCtx 采样率换算）
+  if(!audioCtx || preroll.filled <= 0) return new Float32Array(0);
+  var rate = audioCtx.sampleRate || 16000;
+  var n = Math.min(Math.floor(rate * PREROLL_MS / 1000), preroll.filled);
+  var out = new Float32Array(n);
+  for(var i=0;i<n;i++){ out[i] = preroll.buf[(preroll.w - n + i + preroll.buf.length*2) % preroll.buf.length]; }
+  return out;
+}
 function startRecording(){
   return new Promise(function(resolve, reject){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ reject(new Error("浏览器不支持麦克风")); return; }
     ensureAudio();
-    navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:true, noiseSuppression:true}})
-      .then(function(stream){
-        try{ var ctx = audioCtx; var src = ctx.createMediaStreamSource(stream);
-          var proc = ctx.createScriptProcessor(4096, 1, 1); var chunks = [];
-          proc.onaudioprocess = function(ev){ chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
-          src.connect(proc); proc.connect(ctx.destination);
-          recorder = { stream, src, proc, chunks,
-            stop: function(){ try{ src.disconnect(); }catch(e){} try{ proc.disconnect(); }catch(e){} stream.getTracks().forEach(function(t){ t.stop(); }); var total = chunks.reduce(function(a,c){ return a+c.length; },0); var all = new Float32Array(total); var off=0; for(var i=0;i<chunks.length;i++){ all.set(chunks[i],off); off+=chunks[i].length; } return all; }
-          }; resolve(recorder);
-        }catch(e){ stream.getTracks().forEach(function(t){ t.stop(); }); reject(e); }
-      }).catch(function(e){ reject(new Error("无法访问麦克风："+e.message)); });
+    var build = function(stream, warm){
+      try{ var ctx = audioCtx; var src = ctx.createMediaStreamSource(stream);
+        var proc = ctx.createScriptProcessor(4096, 1, 1); var chunks = [];
+        proc.onaudioprocess = function(ev){ chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
+        src.connect(proc); proc.connect(ctx.destination);
+        recorder = { stream, src, proc, chunks,
+          stop: function(){
+            // 前置缓冲（仅常驻流模式）+ 正式段，拼接后返回；不再关闭常驻流
+            var head = warm ? takePreroll() : new Float32Array(0);
+            var total = head.length + chunks.reduce(function(a,c){ return a+c.length; },0);
+            var all = new Float32Array(total); var off=0;
+            all.set(head, off); off += head.length;
+            for(var i=0;i<chunks.length;i++){ all.set(chunks[i],off); off+=chunks[i].length; }
+            if(!warm){ try{ src.disconnect(); }catch(e){} try{ proc.disconnect(); }catch(e){} stream.getTracks().forEach(function(t){ t.stop(); }); }
+            return all;
+          }
+        }; resolve(recorder);
+      }catch(e){ if(!warm){ stream.getTracks().forEach(function(t){ t.stop(); }); } reject(e); }
+    };
+    ensureMicStream().then(function(warm){
+      if(warm){ build(warm.stream, true); return; } // 常驻流：秒开，带前置缓冲
+      navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:true, noiseSuppression:true}})
+        .then(function(stream){ build(stream, false); })
+        .catch(function(e){ reject(new Error("无法访问麦克风："+e.message)); });
+    });
   });
 }
 function resample(samples, fromRate, toRate){
