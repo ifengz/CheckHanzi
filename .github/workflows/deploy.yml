@@ -21,10 +21,27 @@ jobs:
           # --exclude 排除：
           #   大模型文件（不在 git 仓库，服务器手动放入，不能删）
           #   宝塔系统文件（.user.ini 无权限删、.well-known SSL 验证、.htaccess 站点配置）
-          switches: -avz --delete --exclude='models/asr/paraformer.onnx' --exclude='models/tts/model.onnx' --exclude='models/tts-backup-aishell3/' --exclude='.git/' --exclude='dev-server.py' --exclude='server-voice.py' --exclude='dev-server.crt' --exclude='dev-server.key' --exclude='char-dict.template.html' --exclude='.user.ini' --exclude='.well-known/' --exclude='.htaccess' --exclude='index.html' --exclude='404.html'
+          switches: -avz --delete --exclude='models/asr/paraformer.onnx' --exclude='models/tts/model.onnx' --exclude='models/tts-backup-aishell3/' --exclude='.git/' --exclude='dev-server.py' --exclude='server-voice.py' --exclude='dev-server.crt' --exclude='dev-server.key' --exclude='char-dict.template.html' --exclude='.user.ini' --exclude='.well-known/' --exclude='.htaccess' --exclude='index.html' --exclude='404.html' --exclude='.github/'
           path: ./
           remote_path: ${{ secrets.DEPLOY_PATH }}
           remote_host: ${{ secrets.DEPLOY_HOST }}
           remote_user: ${{ secrets.DEPLOY_USER }}
           remote_key: ${{ secrets.DEPLOY_SSH_KEY }}
           remote_port: ${{ secrets.DEPLOY_PORT }}
+
+      # ── 语音服务自动部署：上传 server-voice.py → 依赖/模型自检 → 自动探测重启 → 健康检查 ──
+      # 失败（依赖装不上/模型下载失败/健康检查不过）会在这里报红，前端站点不受影响
+      - name: 部署语音服务并重启
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/voice_deploy_key
+          chmod 600 ~/.ssh/voice_deploy_key
+          SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
+          $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /opt/chazi-voice"
+          cat server-voice.py | $SSH "$SSH_USER@$SSH_HOST" "cat > /opt/chazi-voice/server-voice.py"
+          $SSH "$SSH_USER@$SSH_HOST" "bash -s" < .github/scripts/deploy-voice.sh

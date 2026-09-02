@@ -1046,15 +1046,15 @@ function handleVoiceResult(text){
   for(var i=0;i<text2.length;i++){ var ch = text2[i]; if(/[\u4e00-\u9fff]/.test(ch) && hanzi.indexOf(ch)===-1) hanzi.push(ch); }
   // 一句话（≥2 个汉字）→ 直接把整句话的所有字列出来让小孩点选要查哪个
   if(hanzi.length >= 2){ showSelectMode(text2); return; }
-  // 单个字 → 直接查它
-  if(hanzi.length === 1){ showVoiceResults(hanzi, text, toneNum); return; }
+  // 单个字 → 查它 + 同音字扩展（识别成同音错字时，孩子仍能在候选里找到想查的字）
+  if(hanzi.length === 1){ showVoiceResults(expandHomophones(hanzi[0], toneNum), text, toneNum, true); return; }
   // 纯拼音兜底（含带声调拼音 hào）
   var toned = stripTone(cleaned).replace(/[^a-zv]/g,"");
   var key = toned;
   var toneFromPy = detectTone(cleaned);
   if(PINYIN[key]){
     var list = PINYIN[key].filter(function(c){ return DICT[c]; });
-    if(toneFromPy) list = filterByTone(list, toneFromPy);
+    if(toneFromPy) list = rankByTone(list, toneFromPy); // 软排序：同声调排前、其余保留（孩子声调常不准，硬过滤会误杀）
     showVoiceResults(list, text, toneFromPy);
     return;
   }
@@ -1073,6 +1073,51 @@ function filterByTone(chars, toneNum){
     var pys = Array.isArray(d.p) ? d.p : [d.p];
     return pys.some(function(p){ return detectTone(p) === toneNum; });
   });
+}
+// 声调软排序：同声调排前、其余声调跟后（不删除，孩子声调常不准，硬过滤会误杀正确字）
+function rankByTone(chars, toneNum){
+  var same = [], other = [];
+  chars.forEach(function(c){
+    var d = DICT[c]; if(!d) return;
+    var pys = Array.isArray(d.p) ? d.p : [d.p];
+    (pys.some(function(p){ return detectTone(p) === toneNum; }) ? same : other).push(c);
+  });
+  return same.concat(other);
+}
+// 儿童常见混淆拼音兜底：平翘舌(z/zh)、n/l、f/h、前后鼻音(an/ang、en/eng、in/ing)
+var FUZZY_PY = {zh:"z",z:"zh",ch:"c",c:"ch",sh:"s",s:"sh",n:"l",l:"n",f:"h",h:"f"};
+var FUZZY_FINAL = {an:"ang",ang:"an",en:"eng",eng:"en",in:"ing",ing:"in"};
+function fuzzyPinyinKeys(key){
+  var m = /^(zh|ch|sh|[bpmfdtnlgkhjqxrzcsyw])?(.*)$/.exec(key); if(!m) return [];
+  var ini = m[1] || "", fin = m[2] || "", out = [];
+  [ini, FUZZY_PY[ini]].forEach(function(i){
+    [fin, FUZZY_FINAL[fin]].forEach(function(f){
+      var k = (i || "") + (f || "");
+      if(k && k !== key && out.indexOf(k) === -1) out.push(k);
+    });
+  });
+  return out;
+}
+// 单字 → 同音字扩展：识别字排最前 → 同音同调 → 同音异调 → 模糊拼音（最多14个）
+// 场景：孩子说"妈"被识别成"马"——拼音声调都对只差同音字，扩展后仍能选到想查的字
+function expandHomophones(ch, toneNum){
+  var d = DICT[ch]; if(!d) return [ch];
+  var pys = Array.isArray(d.p) ? d.p : [d.p];
+  var key = stripTone(pys[0]);
+  var tone = toneNum || detectTone(pys[0]);
+  var sameTone = [], otherTone = [];
+  (PINYIN[key] || []).forEach(function(c){
+    if(c === ch || !DICT[c]) return;
+    var cp = Array.isArray(DICT[c].p) ? DICT[c].p : [DICT[c].p];
+    (cp.some(function(p){ return detectTone(p) === tone; }) ? sameTone : otherTone).push(c);
+  });
+  var fuzzy = [];
+  fuzzyPinyinKeys(key).forEach(function(k){
+    (PINYIN[k] || []).forEach(function(c){
+      if(c !== ch && DICT[c] && fuzzy.indexOf(c) === -1) fuzzy.push(c);
+    });
+  });
+  return [ch].concat(sameTone, otherTone, fuzzy).slice(0, 14);
 }
 // 选字模式判断：2~6 个字且无明确指字目标（如"好为人师"），让小孩点选
 function shouldUseSelectMode(text){
@@ -1121,11 +1166,11 @@ function parseVoiceIntent(text){
   order.sort(function(a,b){ return score[b]-score[a] || order.indexOf(a)-order.indexOf(b); });
   return order;
 }
-function showVoiceResults(chars, rawText, toneNum){
-  // 纯拼音场景（如只说"wan"）：显示所有同音字，让孩子从列表中找到想查的字
+function showVoiceResults(chars, rawText, toneNum, forceWide){
+  // 纯拼音场景（如只说"wan"）/ 单字同音字扩展：显示全部候选（最多14个），让孩子从列表中找到想查的字
   // 指字描述场景（"饭碗的碗"）：精确命中，显示前3个即可
   var isPinyinOnly = !/[\u4e00-\u9fff]/.test((rawText||"").replace(/[。，、？！,.?!；;\s]/g,""));
-  var limit = isPinyinOnly ? 14 : 3;
+  var limit = (isPinyinOnly || forceWide) ? 14 : 3;
   var list = chars.filter(function(c){ return DICT[c]; }).slice(0,limit);
   if(!list.length){ toast("字库里还没有这个字"); return; }
   var echo = $("voiceEcho");
