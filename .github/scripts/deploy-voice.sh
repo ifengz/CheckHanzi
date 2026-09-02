@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# 查字宝语音服务自动部署脚本（在服务器上执行，由 GitHub Actions 通过 ssh 调起）
-# 策略：从运行中的进程反查真实解释器/工作目录/环境变量，依赖装进那个环境，
-#       重启沿用 systemd/supervisor/原样三种方式自动探测；失败在杀进程前中止，绝不带崩线上。
+# 查字宝语音服务自动部署脚本 v3（在服务器上执行，由 GitHub Actions 通过 ssh 调起）
+# 探测：/proc/PID/cmdline 取原始解释器（venv 入口，不做符号链接解析）
+# 依赖：装进该解释器环境；若是系统 python（PEP668）则建专用 venv 并改 systemd unit 的 ExecStart
+# 重启：systemd restart；失败在杀进程前中止，绝不带崩线上
 set -u
 APP_DIR=/opt/chazi-voice
 SV_DIR="$APP_DIR/sensevoice"
@@ -14,49 +15,74 @@ fail(){ log "FATAL: $*"; exit 1; }
 mkdir -p "$APP_DIR" 2>/dev/null || sudo -n mkdir -p "$APP_DIR" || fail "无法创建 $APP_DIR"
 
 PID=$(pgrep -f server-voice.py 2>/dev/null | head -1 || true)
-EXE=""; CWD="$APP_DIR"; UNIT=""; PNAME=""
+CMD0=""; UNIT=""
 if [ -n "$PID" ]; then
-  EXE=$(readlink -f "/proc/$PID/exe" 2>/dev/null || true)
-  CWD=$(readlink -f "/proc/$PID/cwd" 2>/dev/null || echo "$APP_DIR")
+  CMD0=$(tr "\0" "\n" < "/proc/$PID/cmdline" 2>/dev/null | head -1)
   log "发现运行中的服务: PID=$PID"
-  log "  解释器: ${EXE:-未知}"
-  log "  工作目录: $CWD"
-  if command -v systemctl >/dev/null 2>&1; then
+  log "  启动解释器(cmdline): $CMD0"
+fi
+if command -v systemctl >/dev/null 2>&1; then
+  if [ -n "$PID" ]; then
     UNIT=$(systemctl status "$PID" --no-pager 2>/dev/null | grep -o "[a-zA-Z0-9_.@-]*[.]service" | head -1 || true)
-    [ -n "$UNIT" ] && log "  托管方式: systemd($UNIT)"
   fi
   if [ -z "$UNIT" ]; then
-    PPID_NUM=$(ps -o ppid= -p "$PID" 2>/dev/null | tr -d " ")
-    PNAME=$(ps -o comm= -p "$PPID_NUM" 2>/dev/null || true)
-    [ -n "$PNAME" ] && log "  父进程: $PNAME"
+    UNIT=$(systemctl list-units --type=service --all --no-legend 2>/dev/null | awk "/chazi|voice/{print \$1; exit}" || true)
   fi
-else
-  log "未发现运行中的 server-voice.py 进程（可能服务已停）"
+  [ -n "$UNIT" ] && log "  托管方式: systemd($UNIT)"
+fi
+if [ -n "$UNIT" ]; then
+  systemctl cat "$UNIT" 2>/dev/null | grep -E "ExecStart|Environment|WorkingDirectory" | sed "s/^/  [unit] /" || true
 fi
 
-# ---- 1) 依赖安装：装进进程真实使用的环境；没有进程就建专用 venv ----
-if [ -n "$EXE" ] && [ -x "$EXE" ]; then
-  PY="$EXE"
-else
-  log "创建专用虚拟环境 $APP_DIR/venv"
+# ---- 1) 选定依赖安装目标解释器 ----
+# venv 判定：cmdline 的解释器路径存在、可执行、且不在 /usr /bin 系统目录下
+PY=""
+NEED_UNIT_PATCH=0
+case "$CMD0" in
+  /usr/bin/*|/bin/*|"" ) NEED_UNIT_PATCH=1 ;;
+  * ) [ -x "$CMD0" ] && PY="$CMD0" || NEED_UNIT_PATCH=1 ;;
+esac
+
+if [ "$NEED_UNIT_PATCH" = "1" ]; then
+  log "创建专用虚拟环境 $APP_DIR/venv（系统 python 受 PEP668 保护，不直接装）"
   if ! python3 -m venv "$APP_DIR/venv" 2>/dev/null; then
     apt-get install -y python3-venv >/dev/null 2>&1 || sudo -n apt-get install -y python3-venv
     python3 -m venv "$APP_DIR/venv" || fail "venv 创建失败"
   fi
   PY="$APP_DIR/venv/bin/python"
 fi
-log "依赖检查解释器: $PY"
+log "依赖目标解释器: $PY"
+
 MISSING=""
 for m in flask flask_cors edge_tts sherpa_onnx opencc numpy; do
   "$PY" -c "import $m" 2>/dev/null || MISSING="$MISSING $m"
 done
 if [ -n "$MISSING" ]; then
   log "安装缺失依赖:$MISSING"
-  "$PY" -m pip install $MISSING || \
-    "$PY" -m pip install --break-system-packages $MISSING || \
-    fail "依赖安装失败（解释器 $PY）"
+  if ! "$PY" -m pip install $MISSING 2>&1 | tail -5; then
+    if [ "$NEED_UNIT_PATCH" = "0" ]; then
+      log "该解释器装依赖失败，改用专用 venv + 修改 systemd unit"
+      python3 -m venv "$APP_DIR/venv" 2>/dev/null || fail "venv 创建失败"
+      PY="$APP_DIR/venv/bin/python"
+      "$PY" -m pip install $MISSING 2>&1 | tail -5 || fail "专用 venv 依赖安装失败"
+    else
+      fail "依赖安装失败（$PY）"
+    fi
+  fi
 fi
-"$PY" -c "import sherpa_onnx" 2>/dev/null || fail "sherpa_onnx 仍不可用（$PY）"
+"$PY" -c "import sherpa_onnx, flask, opencc, numpy" 2>/dev/null || fail "依赖校验不过（$PY）"
+log "依赖就绪 ✓"
+
+# 若切换到了专用 venv 且是 systemd 托管：改 unit 的 ExecStart 指向 venv python（保留 Environment 等）
+if [ "$NEED_UNIT_PATCH" = "1" ] && [ -n "$UNIT" ]; then
+  UPATH=$(systemctl show -p FragmentPath --value "$UNIT" 2>/dev/null)
+  if [ -n "$UPATH" ] && [ -f "$UPATH" ]; then
+    log "修改 $UPATH 的 ExecStart -> $PY（先备份 .bak）"
+    cp "$UPATH" "$UPATH.bak"
+    sed -i "s|^ExecStart=.*|ExecStart=$PY $APP_DIR/server-voice.py|" "$UPATH"
+    systemctl daemon-reload
+  fi
+fi
 
 # ---- 2) SenseVoice 模型就位（约240MB，仅首次）----
 if [ ! -f "$SV_DIR/model.int8.onnx" ] || [ ! -f "$SV_DIR/tokens.txt" ]; then
@@ -76,23 +102,19 @@ else
   log "模型已存在，跳过下载"
 fi
 
-# ---- 3) 重启：沿用原托管方式，原样还原环境 ----
-if [ -n "$PID" ] && [ -n "$UNIT" ]; then
+# ---- 3) 重启 ----
+if [ -n "$UNIT" ]; then
   log "systemd 重启: $UNIT"
   systemctl restart "$UNIT"
-elif [ -n "$PID" ] && [ "$PNAME" = "supervisord" ] && command -v supervisorctl >/dev/null 2>&1; then
-  log "supervisor 重启"
-  supervisorctl restart chazi-voice 2>/dev/null || supervisorctl restart all
 elif [ -n "$PID" ]; then
-  log "原样重启：同解释器 + 同工作目录 + 同环境变量"
+  log "无 systemd，原样 nohup 重启（同解释器/同目录/同环境）"
   tr "\0" "\n" < "/proc/$PID/environ" > /tmp/voice_env.$$ 2>/dev/null || : > /tmp/voice_env.$$
   pkill -f server-voice.py 2>/dev/null || true
   sleep 1
-  cd "$CWD"
+  cd "$APP_DIR"
   while IFS= read -r kv; do case "$kv" in *=*) export "$kv" ;; esac; done < /tmp/voice_env.$$
   rm -f /tmp/voice_env.$$
   nohup "$PY" server-voice.py >> "$APP_DIR/voice.log" 2>&1 &
-  log "已用 $PY 在 $CWD 重新拉起"
 else
   log "无原进程，用 $PY 直接启动"
   cd "$APP_DIR" && nohup "$PY" server-voice.py >> "$APP_DIR/voice.log" 2>&1 &
@@ -112,5 +134,5 @@ done
 
 log "健康检查失败（服务没在 $PORT 起来），最近日志："
 tail -25 "$APP_DIR/voice.log" 2>/dev/null
-journalctl -n 25 --no-pager 2>/dev/null | tail -25
+journalctl -u "$UNIT" -n 25 --no-pager 2>/dev/null | tail -25
 exit 1
