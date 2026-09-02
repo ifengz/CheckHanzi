@@ -566,10 +566,36 @@ function startRecording(){
   });
 }
 function resample(samples, fromRate, toRate){
-  if(fromRate === toRate) return samples;
-  var ratio = fromRate / toRate; var outLen = Math.floor(samples.length / ratio);
+  if(fromRate === toRate || !samples || samples.length === 0) return samples;
+  var ratio = fromRate / toRate;
+  // 降采样必须先抗混叠低通：直接线性抽取会把 8kHz 以上的辅音能量(s/sh/c/x/zh)折叠进语音频带，识别变差
+  var fc = ratio > 1.0001 ? 0.45 * toRate : 0.45 * fromRate;
+  var N = Math.min(161, Math.max(65, Math.round(33 * ratio) | 1)); if(N % 2 === 0) N++;
+  var h = null, mid = 0;
+  if(ratio > 1.0001 && samples.length > N){
+    h = new Float32Array(N); var sum = 0;
+    for(var i=0;i<N;i++){
+      var m = i - (N - 1) / 2;
+      var s = (m === 0) ? 2 * fc / fromRate : Math.sin(2 * Math.PI * fc * m / fromRate) / (Math.PI * m);
+      var w = 0.42 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)) + 0.08 * Math.cos(4 * Math.PI * i / (N - 1));
+      h[i] = s * w; sum += h[i];
+    }
+    for(var i=0;i<N;i++) h[i] /= sum;
+    mid = (N - 1) / 2;
+  }
+  var outLen = Math.floor(samples.length / ratio);
   var out = new Float32Array(outLen);
-  for(var i=0;i<outLen;i++){ var pos=i*ratio,i0=Math.floor(pos),i1=Math.min(i0+1,samples.length-1),frac=pos-i0; out[i]=samples[i0]*(1-frac)+samples[i1]*frac; }
+  var integer = Math.abs(ratio - Math.round(ratio)) < 1e-9;
+  var D = integer ? Math.round(ratio) : 0;
+  for(var j=0;j<outLen;j++){
+    if(h){
+      var c = integer ? j * D : j * ratio; var acc = 0;
+      for(var k=0;k<N;k++){ var idx = c + k - mid; if(idx >= 0 && idx < samples.length) acc += samples[idx] * h[k]; }
+      out[j] = acc;
+    }else{
+      var pos=j*ratio,i0=Math.floor(pos),i1=Math.min(i0+1,samples.length-1),frac=pos-i0; out[j]=samples[i0]*(1-frac)+samples[i1]*frac;
+    }
+  }
   return out;
 }
 function recognizeAudio(samples){
