@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: 验证语音服务（引擎状态 + 真实识别一次）
+      - name: 验证语音服务
         env:
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
@@ -17,24 +17,7 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           printf '%s
-' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/voice_deploy_key
+' "$SSH_KEY" > ~/.ssh/voice_deploy_key
           chmod 600 ~/.ssh/voice_deploy_key
           SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
-          $SSH "$SSH_USER@$SSH_HOST" 'bash -s' << 'EOF'
-          echo "=== ping（引擎加载状态）==="
-          curl -s http://127.0.0.1:5001/api/ping; echo
-          echo "=== 生成测试语音并识别（用 edge-tts 生成的 mp3 转 wav）==="
-          /opt/chazi-voice/venv/bin/python - << 'PYEOF'
-          import io, wave, struct, math, urllib.request, json
-          # 生成 0.6s 的 440Hz 正弦 wav（验证引擎通路；识别内容不指望正确）
-          buf = io.BytesIO()
-          with wave.open(buf, "wb") as w:
-              w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
-              for i in range(9600):
-                  w.writeframes(struct.pack("<h", int(6000 * (1 if (i // 800) % 2 == 0 else -1) * math.sin(2 * math.pi * 440 * (i % 800) / 16000))))
-          req = urllib.request.Request("http://127.0.0.1:5001/api/asr", data=buf.getvalue(), headers={"Content-Type": "application/octet-stream"})
-          print("asr 返回:", urllib.request.urlopen(req, timeout=30).read().decode("utf-8"))
-          PYEOF
-          echo "=== 服务日志尾部 ===="
-          journalctl -u chazi-voice -n 10 --no-pager 2>/dev/null | tail -10 || tail -10 /opt/chazi-voice/voice.log 2>/dev/null
-          EOF
+          $SSH "$SSH_USER@$SSH_HOST" "bash -s" < .github/scripts/verify-voice.sh
