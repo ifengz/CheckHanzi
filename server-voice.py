@@ -41,6 +41,14 @@ def get_model():
                 )
     return _model
 
+_CN_DIGITS = "零一二三四五六七八九"
+
+def digits_to_cn(text: str) -> str:
+    """whisper 会把口述数字转成阿拉伯数字（如"四"→"44"），查字场景必须转回汉字；逐位映射即可"""
+    if not any("0" <= c <= "9" for c in text):
+        return text
+    return "".join(_CN_DIGITS[int(c)] if "0" <= c <= "9" else c for c in text)
+
 def whisper_asr(wav_bytes: bytes):
     """用 faster-whisper 识别音频，返回 (简体中文文本, 音频时长秒)"""
     model = get_model()
@@ -50,6 +58,7 @@ def whisper_asr(wav_bytes: bytes):
         vad_filter=True,
         beam_size=1,
         condition_on_previous_text=False,
+        initial_prompt="以下是普通话的词语。",
     )
     text = "".join(s.text for s in segments).strip()
     # faster-whisper base 可能输出繁体（蘋果），转成简体
@@ -58,6 +67,7 @@ def whisper_asr(wav_bytes: bytes):
         text = OpenCC("t2s").convert(text)
     except Exception:
         pass
+    text = digits_to_cn(text)
     return text, getattr(_info, "duration", 0.0)
 
 
