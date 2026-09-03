@@ -54,7 +54,7 @@ fi
 log "依赖目标解释器: $PY"
 
 MISSING=""
-for m in flask flask_cors edge_tts sherpa_onnx opencc numpy; do
+for m in flask flask_cors edge_tts sherpa_onnx opencc numpy websocket; do
   "$PY" -c "import $m" 2>/dev/null || MISSING="$MISSING $m"
 done
 if [ -n "$MISSING" ]; then

@@ -6,20 +6,16 @@
   GET  /api/tts  — 语音合成（edge-tts 微软晓晓，免费无 key）
   GET  /api/ping — 健康检查
 
-识别引擎（全部服务器本地推理，无 key、无外呼，语音不落盘）：
-  1. SenseVoice-small via sherpa-onnx（默认）— 阿里 FunASR 中文专用模型，int8 CPU
-     实测 0.3s 音频 15ms 返回（whisper-small 为 2s 级），中文短语音/单字显著更准。
-     安装：pip install sherpa-onnx opencc numpy
-     模型（约 240MB，两件）：
-       mkdir -p /opt/chazi-voice/sensevoice
-       curl -L -o /tmp/sv.tar.bz2 https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2
-       tar xjf /tmp/sv.tar.bz2 -C /tmp/sv --strip-components=1
-       cp /tmp/sv/model.int8.onnx /tmp/sv/tokens.txt /opt/chazi-voice/sensevoice/
-     （服务器连 GitHub 慢时：本机下载后 scp 上去即可；路径用 SENSEVOICE_DIR 环境变量覆盖）
-  2. faster-whisper（自动回退）— 未装 sherpa-onnx/模型文件缺失/识别异常时启用，
-     模型由 WHISPER_MODEL 控制（base/small）
+识别引擎链（按顺序自动回退）：
+  1. 讯飞语音听写（商业，可选）— 配置了三个环境变量才启用：
+       XFYUN_APP_ID / XFYUN_API_KEY / XFYUN_API_SECRET
+     开通：xfyun.cn 控制台创建应用 → 领取语音听写免费包（家用额度足够）
+     失败/超限自动回退本地引擎，前端无感
+  2. SenseVoice-small via sherpa-onnx — 阿里 FunASR 中文专用模型，int8 CPU
+       模型：/opt/chazi-voice/sensevoice/{model.int8.onnx, tokens.txt}
+  3. faster-whisper（最终兜底）— WHISPER_MODEL 控制（base/small）
 
-引擎开关：环境变量 ASR_ENGINE = sensevoice(默认) | whisper
+引擎开关：环境变量 ASR_ENGINE = sensevoice(默认) | whisper（只影响本地引擎选择）
 """
 
 import os, io, re, wave, hashlib, asyncio, threading, time
@@ -83,6 +79,87 @@ def wav_bytes_to_samples(wav_bytes: bytes):
         sr = w.getframerate()
         data = w.readframes(w.getnframes())
     return np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0, sr
+
+# ── 讯飞语音听写（商业引擎，可选）──────────────────────────────
+# 开通：https://www.xfyun.cn → 控制台 → 创建应用（语音听写流式版，领取免费包）
+# 环境变量：XFYUN_APP_ID / XFYUN_API_KEY / XFYUN_API_SECRET（三者都设置才启用）
+# 免费额度用完或调用失败时自动回退本地 SenseVoice，不影响可用性
+XFYUN_APP_ID = os.environ.get("XFYUN_APP_ID", "").strip()
+XFYUN_API_KEY = os.environ.get("XFYUN_API_KEY", "").strip()
+XFYUN_API_SECRET = os.environ.get("XFYUN_API_SECRET", "").strip()
+XFYUN_ENABLED = bool(XFYUN_APP_ID and XFYUN_API_KEY and XFYUN_API_SECRET)
+
+def xfyun_asr(wav_bytes: bytes):
+    """讯飞语音听写流式版。返回 (文本, 时长秒)；不可用/失败返回 (None, 0.0) 由调用方回退"""
+    if not XFYUN_ENABLED:
+        return None, 0.0
+    import base64, hashlib, hmac, json, ssl
+    from datetime import datetime
+    from time import gmtime
+    try:
+        import websocket
+    except ImportError:
+        print("[asr] 讯飞已配置但缺 websocket-client，pip install websocket-client", flush=True)
+        return None, 0.0
+
+    samples, sr = wav_bytes_to_samples(wav_bytes)
+    if samples.size < sr // 10:
+        return "", len(samples) / sr
+    if sr != 16000:
+        # 讯飞 iat 只收 16k：重采样（前置 resample 已是带限抽取，这里线性即可）
+        n = int(len(samples) * 16000 / sr)
+        x_old = np.linspace(0.0, 1.0, len(samples), endpoint=False)
+        x_new = np.linspace(0.0, 1.0, n, endpoint=False)
+        samples = np.interp(x_new, x_old, samples).astype(np.float32)
+
+    # —— 鉴权（官方 HmacSHA256 方案）——
+    date = datetime.now(gmtime()).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    signature_origin = "host: iat-api.xfyun.cn\ndate: " + date + "\nGET /v2/iat HTTP/1.1"
+    signature_sha = hmac.new(XFYUN_API_SECRET.encode(), signature_origin.encode(), hashlib.sha256).digest()
+    import base64 as b64mod
+    signature = b64mod.b64encode(signature_sha).decode()
+    authorization_origin = ('api_key="' + XFYUN_API_KEY + '", algorithm="hmac-sha256", '
+                            'headers="host date request-line", signature="' + signature + '"')
+    authorization = b64mod.b64encode(authorization_origin.encode()).decode()
+    from urllib.parse import urlencode
+    url = "wss://iat-api.xfyun.cn/v2/iat?" + urlencode({"authorization": authorization, "date": date, "host": "iat-api.xfyun.cn"})
+
+    # —— 流式发送：每帧 1280 字节（40ms），首帧带配置，末帧 status=2 ——
+    pcm = (np.clip(samples, -1, 1) * 32767).astype(np.int16).tobytes()
+    frame_size = 1280
+    total_frames = (len(pcm) + frame_size - 1) // frame_size
+    text_parts = []
+    ws = websocket.create_connection(url, timeout=10, sslopt={"cert_reqs": ssl.CERT_NONE})
+    try:
+        for i in range(total_frames):
+            chunk = pcm[i * frame_size:(i + 1) * frame_size]
+            status = 2 if i == total_frames - 1 else (0 if i == 0 else 1)
+            frame = {"data": {"status": status, "format": "audio/L16;rate=16000", "encoding": "raw", "audio": base64.b64encode(chunk).decode()}}
+            if status == 0:
+                frame["common"] = {"app_id": XFYUN_APP_ID}
+                frame["business"] = {"language": "zh_cn", "domain": "iat", "accent": "mandarin", "vad_eos": 3000, "dwa": "wpgs"}
+            ws.send(json.dumps(frame))
+            resp = json.loads(ws.recv())
+            code = resp.get("code", -1)
+            if code != 0:
+                raise RuntimeError("讯飞 code=%s %s" % (code, resp.get("message", "")))
+            data = resp.get("data") or {}
+            result = data.get("result") or {}
+            ws_list = result.get("ws") or []
+            for seg in ws_list:
+                for cw in seg.get("cw") or []:
+                    w = cw.get("w", "")
+                    if w:
+                        text_parts.append(w)
+            if data.get("status") == 2:
+                break
+    finally:
+        try:
+            ws.close()
+        except Exception:
+            pass
+    text = postprocess("".join(text_parts))
+    return text, len(samples) / 16000
 
 # ── SenseVoice-small（主引擎，sherpa-onnx）─────────────────────
 def get_sensevoice():
@@ -154,7 +231,14 @@ def whisper_asr(wav_bytes: bytes):
     return postprocess(text), getattr(_info, "duration", 0.0)
 
 def recognize(wav_bytes: bytes):
-    """统一入口：SenseVoice 优先，未装/异常自动回退 whisper。返回 (文本, 引擎名, 时长)"""
+    """统一入口：讯飞(已配置时) → SenseVoice → whisper，逐级自动回退。返回 (文本, 引擎名, 时长)"""
+    if XFYUN_ENABLED:
+        try:
+            text, dur = xfyun_asr(wav_bytes)
+            if text is not None:
+                return text, "xfyun", dur
+        except Exception as e:
+            print(f"[asr] 讯飞异常({e})，回退本地引擎", flush=True)
     try:
         text, dur = sensevoice_asr(wav_bytes)
         if text is not None:
@@ -226,13 +310,14 @@ def ping():
         "ok": True,
         "asr": True,
         "tts": True,
-        "model": ENGINE_STATUS,
-        "provider": "本地推理 SenseVoice/whisper + edge-tts (免费无key，无外呼)",
+        "model": ("讯飞语音听写 → " if XFYUN_ENABLED else "") + ENGINE_STATUS,
+        "provider": ("讯飞(商业) + " if XFYUN_ENABLED else "") + "本地推理 SenseVoice/whisper + edge-tts",
     })
 
 if __name__ == "__main__":
     print(f"查字宝语音代理 v3 → http://0.0.0.0:{LISTEN_PORT}")
-    print(f"  识别: {ASR_ENGINE}(主)" + (f" + faster-whisper({WHISPER_MODEL})回退" if ASR_ENGINE == "sensevoice" else ""))
+    xfyun_tip = " + 讯飞商业(已配置)" if XFYUN_ENABLED else "（讯飞未配置，设 XFYUN_APP_ID/XFYUN_API_KEY/XFYUN_API_SECRET 启用）"
+    print(f"  识别: {ASR_ENGINE}(主)" + xfyun_tip + (f" + faster-whisper({WHISPER_MODEL})回退" if ASR_ENGINE == "sensevoice" else ""))
     print("  朗读: edge-tts 晓晓")
     threading.Thread(
         target=lambda: (
