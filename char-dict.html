@@ -569,7 +569,10 @@ function ensureMicStream(){
             for(var i=0;i<d.length;i++){ preroll.buf[preroll.w] = d[i]; preroll.w = (preroll.w+1) % preroll.buf.length; }
             if(preroll.filled < preroll.buf.length) preroll.filled += d.length;
           };
-          src.connect(proc); proc.connect(audioCtx.destination);
+          // 必须接一个静音增益节点：ScriptProcessor 不连 destination 就不会被驱动，
+          // 但直接连 destination 会把麦克风声音送到扬声器 → 回声循环污染识别（重复字幻听）
+          var mute = audioCtx.createGain(); mute.gain.value = 0;
+          src.connect(proc); proc.connect(mute); mute.connect(audioCtx.destination);
           micWarm = { stream: stream, src: src, proc: proc };
           resolve(micWarm);
         }catch(e){ try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e2){} resolve(null); }
