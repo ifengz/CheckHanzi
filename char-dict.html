@@ -119,6 +119,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 }
 .page-head .brand{font-size:clamp(16px,2.2vh,20px);font-weight:800;letter-spacing:2px;color:#BB8C4F;}
 #voiceEcho{flex-shrink:0;margin:clamp(4px,.6vh,10px) 12px 0;padding:clamp(6px,1vh,10px) clamp(10px,1.5vw,14px);background:#FFF3E0;border-radius:14px;font-size:clamp(13px,1.8vh,15px);color:#8D6E63;line-height:1.6;}
+/* 语音整句模式：原句大字，汉字可点查详情 */
+#voiceEchoTxt .sent-zi{display:inline-block;font-size:clamp(30px,6vh,52px);font-weight:700;color:#4E342E;margin:clamp(2px,.5vh,6px) clamp(3px,1vw,10px);padding:clamp(4px,1vh,10px) clamp(8px,2vw,16px);background:#fff;border:3px solid #F0E0C8;border-radius:14px;cursor:pointer;font-family:"Kaiti SC",STKaiti,serif;transition:transform .15s;}
+#voiceEchoTxt .sent-zi:active{transform:scale(.92);}
+#voiceEchoTxt .sent-miss{color:#BCAAA4;background:#F5F5F5;border-style:dashed;cursor:not-allowed;}
 #historyList{flex:1;overflow-y:auto;padding:0 0 12px;}
 .h-item{display:flex;align-items:center;gap:clamp(10px,1.5vh,16px);border:3px solid #F0E0C8;border-radius:clamp(16px,2vh,20px);padding:clamp(10px,1.5vh,16px) clamp(12px,2vw,18px);margin-bottom:clamp(6px,1vh,12px);background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.04);}
 .h-item .zi{font-size:clamp(32px,4.5vh,44px);font-weight:700;width:clamp(40px,6vh,56px);text-align:center;font-family:"Kaiti SC",STKaiti,serif;flex-shrink:0;}
@@ -723,6 +727,8 @@ function lookup(raw){
 }
 function showResultsPage(chars, toneNum){
   $("home").style.display = "none"; $("detail").classList.remove("show"); $("history").classList.remove("show"); $("results").classList.add("show");
+  var _rc = $("resultChars"); if(_rc) _rc.style.display = "";
+  var _sb = $("resSpeakBtn"); if(_sb) _sb.style.display = "";
   prefetchTTSList(chars, 14); // 提前下好候选字读音，点的时候秒播
   var box = $("resultChars"); box.innerHTML = "";
   chars.forEach(function(ch){
@@ -1108,8 +1114,8 @@ function handleVoiceResult(text){
   // 提取句中所有汉字（去重）
   var hanzi = [];
   for(var i=0;i<text2.length;i++){ var ch = text2[i]; if(/[\u4e00-\u9fff]/.test(ch) && hanzi.indexOf(ch)===-1) hanzi.push(ch); }
-  // 一句话（≥2 个汉字）→ 直接把整句话的所有字列出来让小孩点选要查哪个
-  if(hanzi.length >= 2){ showSelectMode(text2); return; }
+  // 一句话（≥2 个汉字）→ 原样显示整句，孩子点句子里任意字查详情
+  if(hanzi.length >= 2){ showSentenceMode(text2); return; }
   // 单个字 → 查它 + 同音字扩展（识别成同音错字时，孩子仍能在候选里找到想查的字）
   if(hanzi.length === 1){ showVoiceResults(expandHomophones(hanzi[0], toneNum), text, toneNum, true); return; }
   // 纯拼音兜底（含带声调拼音 hào）
@@ -1194,6 +1200,49 @@ function shouldUseSelectMode(text){
   return n >= 2 && n <= 6;
 }
 // 选字模式：列出句中所有汉字（去停用词去重），让小孩点选要查的字
+// 语音整句模式：识别结果原样大字输出（保留重复与顺序），点句中任意汉字查详情
+function showSentenceMode(text){
+  $("rTitle").textContent = "📖 你说的是：";
+  $("rSub").textContent = "点句子里的字，看笔顺和部首";
+  var echo = $("voiceEcho");
+  echo.style.display = "block";
+  var et = $("voiceEchoTxt");
+  if(!et){ echo.textContent = text; showResultsPage([], 0); return; }
+  // 原句逐字符渲染：汉字可点（字库外置灰），其余原样
+  var html = "";
+  for(var i=0;i<text.length;i++){
+    var ch = text[i];
+    if(/[\u4e00-\u9fff]/.test(ch)){
+      if(DICT[ch]){
+        html += '<span class="sent-zi" data-zi="' + esc(ch) + '">' + esc(ch) + '</span>';
+      } else {
+        html += '<span class="sent-zi sent-miss" title="字库里还没有这个字">' + esc(ch) + '</span>';
+      }
+    } else if(ch === " "){
+      html += " ";
+    } else {
+      html += esc(ch);
+    }
+  }
+  et.innerHTML = html;
+  var spans = et.querySelectorAll(".sent-zi");
+  for(var j=0;j<spans.length;j++){
+    spans[j].onclick = (function(z){ return function(){
+      current = z; detailFrom = "results"; addHistory(z); renderDetail(0);
+    }; })(spans[j].getAttribute("data-zi"));
+  }
+  // 详情返回时回到句子页面：复用 results 容器渲染空卡列表会露出空结果页，
+  // 所以这里不进 results 列表，句子页面就是 home 上方的 echo + 标题 —— 直接改 home 状态即可？
+  // 现有导航：rTitle/rSub/voiceEcho 属于 results 页面。showResultsPage 会切页面。
+  // 为保持导航简单，仍调 showResultsPage 但传空列表会显示空 —— 不行。
+  // 方案：不调 showResultsPage，手动显示 results 页并隐藏字卡区域。
+  $("home").style.display = "none"; $("detail").classList.remove("show"); $("history").classList.remove("show"); $("results").classList.add("show");
+  var box = $("resultChars"); if(box) box.innerHTML = "";
+  // 隐藏字卡容器和整句朗读按钮（句子在 echo 区）
+  if(box) box.style.display = "none";
+  var btn = $("resSpeakBtn"); if(btn) btn.style.display = "none";
+  prefetchTTSList((text.match(/[\u4e00-\u9fff]/g) || []).filter(function(c,i,a){ return a.indexOf(c)===i; }).slice(0,14), 14);
+}
 function showSelectMode(text){
   var seen = {}; var list = [];
   for(var i=0;i<text.length;i++){ var ch = text[i];
