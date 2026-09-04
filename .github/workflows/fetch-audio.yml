@@ -1,0 +1,27 @@
+name: 拉取识别音频（手动）
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 从服务器拉取留存音频
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/voice_deploy_key
+          chmod 600 ~/.ssh/voice_deploy_key
+          export SSH_USER SSH_PORT
+          bash .github/scripts/fetch-audio.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audio-debug
+          path: audio-out/*.wav
+          if-no-files-found: ignore

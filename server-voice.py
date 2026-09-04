@@ -276,6 +276,19 @@ def asr_handler():
         audio_data = raw
     if not audio_data or len(audio_data) < 1024:
         return jsonify({"error": "音频数据过短"}), 400
+    # 音频留存（诊断用）：最近 10 条，覆盖式，排查"识别不准"时把真实上传音频拉下来分析
+    try:
+        import glob as _glob
+        _dbg = "/opt/chazi-voice/audio-debug"
+        os.makedirs(_dbg, exist_ok=True)
+        _old = sorted(_glob.glob(_dbg + "/*.wav"))
+        if len(_old) >= 10:
+            for _f in _old[:len(_old) - 9]:
+                os.remove(_f)
+        with open(_dbg + "/%s.wav" % time.strftime("%H%M%S"), "wb") as _f:
+            _f.write(audio_data)
+    except Exception:
+        pass
     try:
         t0 = time.time()
         text, engine, dur = recognize(audio_data)
