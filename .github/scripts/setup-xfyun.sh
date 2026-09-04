@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 配置讯飞引擎：三个值由 Actions Secrets 经环境变量传入（日志自动打码），写入 chazi-voice.service 并重启验证
+# 配置讯飞引擎：三个值由 Actions Secrets 经 ssh 命令前缀环境变量传入（日志自动打码）
+# 用 systemd drop-in 目录写入（不动主 unit，幂等），重启后 ping 验证
 set -eu
 UNIT=chazi-voice.service
 
@@ -8,51 +9,37 @@ fail(){ echo "[xfyun-setup] FATAL: $*"; exit 1; }
 [ -n "${XFYUN_API_KEY:-}" ] || fail "XFYUN_API_KEY 未传入"
 [ -n "${XFYUN_API_SECRET:-}" ] || fail "XFYUN_API_SECRET 未传入"
 
-UPATH=$(systemctl show -p FragmentPath --value "$UNIT")
-[ -n "$UPATH" ] && [ -f "$UPATH" ] || fail "找不到 $UNIT 的 unit 文件"
-echo "[xfyun-setup] unit: $UPATH"
-export UNIT_PATH="$UPATH"
-
-cp "$UPATH" "$UPATH.bak.xfyun"
-
-python3 << 'PYEOF'
-import os, sys
-upath = os.environ["UNIT_PATH"]
-appid = os.environ["XFYUN_APP_ID"]
-key = os.environ["XFYUN_API_KEY"]
-secret = os.environ["XFYUN_API_SECRET"]
-lines = open(upath, encoding="utf-8").read().splitlines()
-out, inserted = [], False
-for ln in lines:
-    if ln.startswith("Environment=XFYUN_"):
-        continue
-    out.append(ln)
-    if ln.strip() == "[Service]":
-        out.append("Environment=XFYUN_APP_ID=" + appid)
-        out.append("Environment=XFYUN_API_KEY=" + key)
-        out.append("Environment=XFYUN_API_SECRET=" + secret)
-        inserted = True
-if not inserted:
-    print("FATAL: no [Service] section")
-    sys.exit(1)
-open(upath, "w", encoding="utf-8").write("
-".join(out) + "
-")
-print("[xfyun-setup] unit written (values hidden)")
-PYEOF
-echo "[xfyun-setup] python step done"
+D="/etc/systemd/system/$UNIT.d"
+mkdir -p "$D"
+{
+  printf '[Service]
+'
+  printf 'Environment=XFYUN_APP_ID=%s
+' "$XFYUN_APP_ID"
+  printf 'Environment=XFYUN_API_KEY=%s
+' "$XFYUN_API_KEY"
+  printf 'Environment=XFYUN_API_SECRET=%s
+' "$XFYUN_API_SECRET"
+} > "$D/xfyun.conf"
+chmod 644 "$D/xfyun.conf"
+echo "[xfyun-setup] drop-in 已写入: $D/xfyun.conf (值打码)"
 systemctl daemon-reload
 systemctl restart "$UNIT"
-echo "[xfyun-setup] restarted, waiting..."
+echo "[xfyun-setup] 已重启, 等待健康检查..."
 for i in $(seq 1 20); do
   sleep 2
   RESP=$(curl -s --max-time 3 "http://127.0.0.1:5001/api/ping" 2>/dev/null || true)
   if echo "$RESP" | grep -q '"ok"'; then
     echo "[xfyun-setup] ping: $RESP"
-    echo "[xfyun-setup] DONE OK"
+    # 有讯飞 provider 前缀才算配置成功
+    if echo "$RESP" | grep -q 'xfyun\|\u8baf\u98de'; then
+      echo "[xfyun-setup] DONE OK (讯飞已启用)"
+    else
+      echo "[xfyun-setup] WARN: 服务正常但讯飞前缀未出现, 请检查 server-voice.py 是否最新"
+    fi
     exit 0
   fi
 done
-echo "[xfyun-setup] FATAL: health check failed"
+echo "[xfyun-setup] FATAL: 健康检查失败"
 journalctl -u "$UNIT" -n 15 --no-pager 2>/dev/null | tail -15
 exit 1

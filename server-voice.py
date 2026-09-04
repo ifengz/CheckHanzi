@@ -90,12 +90,11 @@ XFYUN_API_SECRET = os.environ.get("XFYUN_API_SECRET", "").strip()
 XFYUN_ENABLED = bool(XFYUN_APP_ID and XFYUN_API_KEY and XFYUN_API_SECRET)
 
 def xfyun_asr(wav_bytes: bytes):
-    """讯飞语音听写流式版。返回 (文本, 时长秒)；不可用/失败返回 (None, 0.0) 由调用方回退"""
+    """讯飞中英识别大模型（iat.xf-yun.com/v1 免费包）。返回 (文本, 时长秒)；失败返回 (None, 0.0) 由调用方回退"""
     if not XFYUN_ENABLED:
         return None, 0.0
     import base64, hashlib, hmac, json, ssl
-    from datetime import datetime
-    from time import gmtime
+    from email.utils import formatdate
     try:
         import websocket
     except ImportError:
@@ -106,53 +105,73 @@ def xfyun_asr(wav_bytes: bytes):
     if samples.size < sr // 10:
         return "", len(samples) / sr
     if sr != 16000:
-        # 讯飞 iat 只收 16k：重采样（前置 resample 已是带限抽取，这里线性即可）
+        # 讯飞只收 16k：线性重采样兜底（前端上传的已是 16k）
         n = int(len(samples) * 16000 / sr)
         x_old = np.linspace(0.0, 1.0, len(samples), endpoint=False)
         x_new = np.linspace(0.0, 1.0, n, endpoint=False)
         samples = np.interp(x_new, x_old, samples).astype(np.float32)
 
-    # —— 鉴权（官方 HmacSHA256 方案）——
-    date = datetime.now(gmtime()).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    signature_origin = "host: iat-api.xfyun.cn\ndate: " + date + "\nGET /v2/iat HTTP/1.1"
-    signature_sha = hmac.new(XFYUN_API_SECRET.encode(), signature_origin.encode(), hashlib.sha256).digest()
-    import base64 as b64mod
-    signature = b64mod.b64encode(signature_sha).decode()
+    # —— 鉴权（大模型接口，时钟偏差需 <=300s）——
+    date = formatdate(usegmt=True)
+    signature_origin = "host: iat.xf-yun.com\ndate: " + date + "\nGET /v1 HTTP/1.1"
+    signature = base64.b64encode(
+        hmac.new(XFYUN_API_SECRET.encode(), signature_origin.encode(), hashlib.sha256).digest()).decode()
     authorization_origin = ('api_key="' + XFYUN_API_KEY + '", algorithm="hmac-sha256", '
                             'headers="host date request-line", signature="' + signature + '"')
-    authorization = b64mod.b64encode(authorization_origin.encode()).decode()
+    authorization = base64.b64encode(authorization_origin.encode()).decode()
     from urllib.parse import urlencode
-    url = "wss://iat-api.xfyun.cn/v2/iat?" + urlencode({"authorization": authorization, "date": date, "host": "iat-api.xfyun.cn"})
+    url = "wss://iat.xf-yun.com/v1?" + urlencode({"authorization": authorization, "date": date, "host": "iat.xf-yun.com"})
 
-    # —— 流式发送：每帧 1280 字节（40ms），首帧带配置，末帧 status=2 ——
+    # —— 发送：1280 字节/帧，全部发完再收结果；末帧空音频 status=2；不开 dwa（追加语义，解析简单）——
     pcm = (np.clip(samples, -1, 1) * 32767).astype(np.int16).tobytes()
     frame_size = 1280
-    total_frames = (len(pcm) + frame_size - 1) // frame_size
+    chunks = [pcm[i:i + frame_size] for i in range(0, len(pcm), frame_size)]
     text_parts = []
     ws = websocket.create_connection(url, timeout=10, sslopt={"cert_reqs": ssl.CERT_NONE})
     try:
-        for i in range(total_frames):
-            chunk = pcm[i * frame_size:(i + 1) * frame_size]
-            status = 2 if i == total_frames - 1 else (0 if i == 0 else 1)
-            frame = {"data": {"status": status, "format": "audio/L16;rate=16000", "encoding": "raw", "audio": base64.b64encode(chunk).decode()}}
-            if status == 0:
-                frame["common"] = {"app_id": XFYUN_APP_ID}
-                frame["business"] = {"language": "zh_cn", "domain": "iat", "accent": "mandarin", "vad_eos": 3000, "dwa": "wpgs"}
+        seq = 0
+        for i, chunk in enumerate(chunks):
+            seq += 1
+            frame = {"header": {"app_id": XFYUN_APP_ID, "status": 0 if i == 0 else 1}}
+            if i == 0:
+                frame["parameter"] = {"iat": {
+                    "domain": "slm", "language": "zh_cn", "accent": "mandarin", "eos": 6000,
+                    "result": {"encoding": "utf8", "compress": "raw", "format": "json"}}}
+            frame["payload"] = {"audio": {
+                "encoding": "raw", "sample_rate": 16000, "channels": 1, "bit_depth": 16,
+                "seq": seq, "status": 0 if i == 0 else 1,
+                "audio": base64.b64encode(chunk).decode()}}
             ws.send(json.dumps(frame))
-            resp = json.loads(ws.recv())
-            code = resp.get("code", -1)
-            if code != 0:
-                raise RuntimeError("讯飞 code=%s %s" % (code, resp.get("message", "")))
-            data = resp.get("data") or {}
-            result = data.get("result") or {}
-            ws_list = result.get("ws") or []
-            for seg in ws_list:
-                for cw in seg.get("cw") or []:
-                    w = cw.get("w", "")
-                    if w:
-                        text_parts.append(w)
-            if data.get("status") == 2:
+        # 末帧：空音频 + status=2
+        seq += 1
+        ws.send(json.dumps({
+            "header": {"app_id": XFYUN_APP_ID, "status": 2},
+            "payload": {"audio": {"encoding": "raw", "sample_rate": 16000, "channels": 1,
+                                  "bit_depth": 16, "seq": seq, "status": 2, "audio": ""}}}))
+        # —— 收结果：直到 header.status==2；text 为 base64(JSON)，JSON 里 ws[].cw[].w 取字 ——
+        got_final = False
+        for _ in range(len(chunks) + 20):
+            try:
+                resp = json.loads(ws.recv())
+            except Exception:
                 break
+            header = resp.get("header") or {}
+            if header.get("code", -1) != 0:
+                raise RuntimeError("讯飞 code=%s %s" % (header.get("code"), header.get("message", "")))
+            payload = resp.get("payload") or {}
+            result = payload.get("result")
+            if result and result.get("text"):
+                obj = json.loads(base64.b64decode(result["text"]).decode("utf-8"))
+                for seg in obj.get("ws") or []:
+                    for cw in seg.get("cw") or []:
+                        w = cw.get("w", "")
+                        if w:
+                            text_parts.append(w)
+            if header.get("status") == 2 or (result and result.get("status") == 2):
+                got_final = True
+                break
+        if not got_final and not text_parts:
+            raise RuntimeError("讯飞未返回最终结果（超时）")
     finally:
         try:
             ws.close()
