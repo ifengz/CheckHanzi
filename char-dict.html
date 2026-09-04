@@ -1200,11 +1200,31 @@ function showSelectMode(text){
     if(!/[\u4e00-\u9fff]/.test(ch)) continue;
     if(!(ch in seen)){ seen[ch]=1; if(DICT[ch]) list.push(ch); }
   }
-  $("rTitle").textContent = "📖 你说的是一句话，里面有几个字——点你要查的那个";
-  $("rSub").textContent = "想查哪个字，就点哪个";
+  // 意图加权排序："X的X"指字/指令/句尾等模式命中的目标字排最前（如"吃饭的饭"→饭排第一）
+  var ranked = parseVoiceIntent(text);
+  var rankOf = function(ch){ var i = ranked.indexOf(ch); return i === -1 ? 9999 : i; };
+  list.sort(function(a,b){ return rankOf(a) - rankOf(b); });
+  // 意图命中的第一个字（最可能是孩子想查的）标记出来
+  var best = ranked.length ? ranked[0] : null;
+  $("rTitle").textContent = best ? ("📖 你说的是一句话——你想查的可能是「" + best + "」") : "📖 你说的是一句话，里面有几个字——点你要查的那个";
+  $("rSub").textContent = "点你要查的那个字";
   var echo = $("voiceEcho");
   if(text){ echo.style.display = "block"; $("voiceEchoTxt").textContent = text; }
   showResultsPage(list, 0);
+  // 高亮意图字卡片（showResultsPage 渲染到 #resultChars 后执行）
+  if(best){
+    setTimeout(function(){
+      var cards = document.querySelectorAll("#resultChars .char-card");
+      for(var i=0;i<cards.length;i++){
+        var ziEl = cards[i].querySelector(".zi");
+        if(ziEl && ziEl.textContent.trim() === best){
+          cards[i].style.outline = "3px solid #ff9800"; cards[i].style.borderRadius = "12px";
+          cards[i].style.transform = "scale(1.05)";
+          break;
+        }
+      }
+    }, 80);
+  }
 }
 function parseVoiceIntent(text){
   var score = {}; var order = [];
