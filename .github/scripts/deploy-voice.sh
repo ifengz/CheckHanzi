@@ -58,18 +58,27 @@ for m in flask flask_cors edge_tts sherpa_onnx opencc numpy websocket; do
   "$PY" -c "import $m" 2>/dev/null || MISSING="$MISSING $m"
 done
 if [ -n "$MISSING" ]; then
-  log "安装缺失依赖:$MISSING"
-  if ! "$PY" -m pip install $MISSING 2>&1 | tail -5; then
+  # websocket 导入名对应 pip 包名是 websocket-client（pip install websocket 是废弃旧包，无 create_connection）
+  PKGS=$(echo "$MISSING" | sed 's/\bwebsocket\b/websocket-client/g')
+  log "安装缺失依赖:$PKGS"
+  if ! "$PY" -m pip install $PKGS 2>&1 | tail -5; then
     if [ "$NEED_UNIT_PATCH" = "0" ]; then
       log "该解释器装依赖失败，改用专用 venv + 修改 systemd unit"
       python3 -m venv "$APP_DIR/venv" 2>/dev/null || fail "venv 创建失败"
       PY="$APP_DIR/venv/bin/python"
-      "$PY" -m pip install $MISSING 2>&1 | tail -5 || fail "专用 venv 依赖安装失败"
+      "$PY" -m pip install $PKGS 2>&1 | tail -5 || fail "专用 venv 依赖安装失败"
     else
       fail "依赖安装失败（$PY）"
     fi
   fi
 fi
+# 若已误装废弃 websocket 包，强制替换为 websocket-client
+if "$PY" -c "import websocket" 2>/dev/null && ! "$PY" -c "from websocket import create_connection" 2>/dev/null; then
+  log "检测到废弃 websocket 包，替换为 websocket-client"
+  "$PY" -m pip uninstall -y websocket 2>&1 | tail -2
+  "$PY" -m pip install websocket-client 2>&1 | tail -3
+fi
+"$PY" -c "from websocket import create_connection" 2>/dev/null || fail "websocket-client 校验失败（$PY）"
 "$PY" -c "import sherpa_onnx, flask, opencc, numpy" 2>/dev/null || fail "依赖校验不过（$PY）"
 log "依赖就绪 ✓"
 
