@@ -21,7 +21,7 @@ jobs:
           # --exclude 排除：
           #   大模型文件（不在 git 仓库，服务器手动放入，不能删）
           #   宝塔系统文件（.user.ini 无权限删、.well-known SSL 验证、.htaccess 站点配置）
-          switches: -avz --delete --exclude='models/asr/paraformer.onnx' --exclude='models/tts/model.onnx' --exclude='models/tts-backup-aishell3/' --exclude='.git/' --exclude='dev-server.py' --exclude='server-voice.py' --exclude='dev-server.crt' --exclude='dev-server.key' --exclude='char-dict.template.html' --exclude='.user.ini' --exclude='.well-known/' --exclude='.htaccess' --exclude='index.html' --exclude='404.html' --exclude='.github/'
+          switches: -avz --delete --exclude='models/tts/model.onnx' --exclude='models/tts-backup-aishell3/' --exclude='.git/' --exclude='dev-server.py' --exclude='server-voice.py' --exclude='dev-server.crt' --exclude='dev-server.key' --exclude='char-dict.template.html' --exclude='.user.ini' --exclude='.well-known/' --exclude='.htaccess' --exclude='index.html' --exclude='404.html' --exclude='.github/'
           path: ./
           remote_path: ${{ secrets.DEPLOY_PATH }}
           remote_host: ${{ secrets.DEPLOY_HOST }}

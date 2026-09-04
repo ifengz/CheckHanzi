@@ -261,7 +261,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   <div class="logo">字</div>
   <h2>查字宝</h2>
   <div id="loadBar"><i></i></div>
-  <div id="loadText">正在准备离线语音…</div>
+  <div id="loadText">正在连接语音服务…</div>
   <div id="loadErr">出错了<br><button onclick="location.reload()">重新加载</button></div>
 </div>
 
@@ -317,59 +317,6 @@ function showLoadErr(msg){
   $("loadErr").innerHTML = msg + "<br><button onclick=\"location.reload()\">重新加载</button>";
 }
 var loadStartedAt = Date.now(); var loadTimeoutDone = false;
-function armLoadTimeout(){
-  setTimeout(function(){
-    if(engine.asrReady || loadTimeoutDone) return; loadTimeoutDone = true;
-    var why = [];
-    if(typeof window.crossOriginIsolated === "undefined" || !window.crossOriginIsolated){
-      why.push("这个页面缺少跨域隔离头（COOP/COEP），语音引擎无法启动。");
-      why.push("本地开发请用项目里的 dev-server.py 启动，并访问 http://127.0.0.1:8000/char-dict.html");
-      why.push("部署时请按 README 在服务器配置 COOP/COEP 响应头。");
-    } else { why.push("加载超时。可能是模型下载慢或加载出错。"); why.push("请检查浏览器控制台里的红色报错，或刷新重试。"); }
-    showLoadErr("⚠️ 语音识别没有加载完成<br>" + why.join("<br>"));
-  }, 40000);
-}
-function initASREngine(){
-  if(engine.asrReady || engine.asrLoading) return engine.asrPromise;
-  engine.asrLoading = true; armLoadTimeout();
-  engine.asrPromise = (async function(){
-    try{
-      setLoadProgress(2, "正在准备离线语音…");
-      window.wasmOffsetConverter = true;
-      window.Module = {
-        getPreloadedPackage: function(name, size){ return new ArrayBuffer(4096); },
-        locateFile: function(path, dir){
-          if(path.endsWith(".wasm")) return "models/asr/"+path+"?v="+ASSET_VER;
-          if(path.endsWith(".data")) return "models/asr/"+path+"?v="+ASSET_VER;
-          return dir + path;
-        },
-        setStatus: function(s){ if(s) setLoadProgress(6, s); },
-        onRuntimeInitialized: async function(){
-          try{
-            setLoadProgress(10, "下载语音识别模型…");
-            var files = [{name:"/paraformer.onnx", url:"models/asr/paraformer.onnx", weight:97},{name:"/tokens.txt", url:"models/asr/tokens.txt", weight:3}];
-            var done = 10;
-            for(var i=0;i<files.length;i++){
-              var f = files[i];
-              var buf = await fetchModel(f.url, f.name, function(loaded,total){ var p = (loaded/total)*f.weight; setLoadProgress(done+p, "下载语音识别模型… "+f.name); });
-              FS.writeFile(f.name, new Uint8Array(buf)); done += f.weight;
-            }
-            setLoadProgress(97, "创建识别器…");
-            engine.recognizer = new OfflineRecognizer({
-              featConfig: { sampleRate: 16000, featureDim: 80 },
-              modelConfig: { paraformer: { model: "/paraformer.onnx" }, tokens: "/tokens.txt", numThreads: 2, debug: 0, provider: "cpu" },
-              decodingMethod: "greedy_search", maxActivePaths: 4,
-            }, window.Module);
-            engine.asrReady = true; setLoadProgress(100, "完成！"); hideLoadOverlay();
-          }catch(e){ console.error(e); showLoadErr("语音识别加载失败：" + (e.message||"未知错误")); }
-        }
-      };
-      await loadScript("models/asr/sherpa-onnx-wasm-main-vad-asr.js");
-      await loadScript("models/asr/sherpa-onnx-asr.js"); engineActive = "asr";
-    }catch(e){ console.error(e); showLoadErr("语音识别加载失败：" + (e.message||"未知错误")); }
-  })();
-  return engine.asrPromise;
-}
 function hideLoadOverlay(){ loadTimeoutDone = true; setTimeout(function(){ $("loadOverlay").style.display = "none"; }, 300); }
 var ttsWorker = null; var ttsPending = []; var ttsGenSeq = 0; var strokePlaySeq = 0;
 function initTTSEngine(){
@@ -664,19 +611,6 @@ function resample(samples, fromRate, toRate){
   }
   return out;
 }
-function recognizeAudio(samples){
-  return new Promise(function(resolve){
-    if(!engine.recognizer){ resolve(""); return; }
-    try{
-      var stream = engine.recognizer.createStream();
-      var resampled = resample(samples, audioCtx.sampleRate, 16000);
-      stream.acceptWaveform(16000, resampled); engine.recognizer.decode(stream);
-      var result = engine.recognizer.getResult(stream);
-      var text = (result && result.text) ? result.text.trim() : "";
-      stream.free(); resolve(text);
-    }catch(e){ console.error(e); resolve(""); }
-  });
-}
 function floatToWav(samples, sr){
   var buf = new ArrayBuffer(44 + samples.length*2), v = new DataView(buf);
   function ws(o, s){ for(var i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); }
@@ -700,20 +634,10 @@ function cloudRecognize(samples){
       x.onload = function(){ try{ var d = JSON.parse(x.responseText); r((d && d.text) ? d.text.trim() : ""); }catch(e){ r(""); } };
       x.onerror = x.ontimeout = function(){
         if(attempts < 2){ setTimeout(sendOnce, 800); return; } // 云端瞬时抖动：先重试一次
-        fallback();
+        toast("网络不太好，等下再试一次");
+        r("");
       };
       x.send(fd);
-    };
-    // 仅云端真正不可达时才回退本地（本地引擎后台加载，不阻塞页面）
-    var fallback = function(){
-      if(engine.asrReady){ recognizeAudio(samples).then(r); return; }
-      if(!engine.asrLoading && !engine.asrReady){ toast("云端语音暂不可达，正在准备离线语音…"); initASREngine(); }
-      var tries = 0;
-      var t = setInterval(function(){
-        tries++;
-        if(engine.asrReady){ clearInterval(t); recognizeAudio(samples).then(r); }
-        else if(tries > 30){ clearInterval(t); r(""); }
-      }, 1000);
     };
     sendOnce();
   });
@@ -1045,7 +969,7 @@ function cancelAutoRec(){
 }
 function startHold(){
   if(rec.active) return;
-  if(!engine.asrReady && !cloudASR){ toast("语音识别还在准备中，请稍等…"); return; }
+  if(!cloudASR){ toast("语音服务连不上，检查网络后再试"); return; }
   rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.startTime = Date.now(); ensureAudio();
   if(rec.btn) rec.btn.classList.add("holding"); setRecState("listen");
   startRecording().then(function(recorderObj){
@@ -1378,8 +1302,7 @@ $("debugClearList").onclick = function(){
 $("searchInput").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ this.blur(); if(this.value.trim()) lookup(this.value.trim()); } });
 renderHistCount();
 document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
-var crossIsolated = (typeof window.crossOriginIsolated !== "undefined" && window.crossOriginIsolated);
-if(!crossIsolated){ $("warnBanner").style.display = "block"; setTimeout(function(){ if(engine.asrReady || loadTimeoutDone || cloudProbeDone) return; loadTimeoutDone = true; showLoadErr("⚠️ 语音识别无法启动<br>这个页面缺少跨域隔离头（COOP/COEP），语音引擎启动被浏览器拦截。<br>本地开发：用项目里的 dev-server.py 启动，访问 http://127.0.0.1:8000/char-dict.html<br>部署到宝塔：按 README 配置三个响应头后再打开。"); }, 6000); }
+
 // 探测云端语音代理（5s 超时 + 失败重试 2 次）：可用则跳过本地 78MB 模型下载（页面秒开）
 // 云端不可达时：页面照常放行（键盘查字可用），离线引擎只在后台准备，绝不把进度条挡在孩子面前
 function pingCloud(){
@@ -1398,16 +1321,14 @@ var cloudProbeDone = false;
       cloudASR = !!d.asr; cloudTTS = !!d.tts;
       cloudProbeDone = true;
       hideLoadOverlay();
-      if(!cloudASR && !engine.asrReady && !engine.asrLoading){ initASREngine(); }
       if(!cloudTTS && !engine.ttsReady && !engine.ttsLoading){ setTimeout(function(){ initTTSEngine(); }, 6000); }
       return;
     }
     if(retryLeft > 0){ setTimeout(function(){ probeCloud(retryLeft - 1); }, 1200); return; }
-    // 云端彻底不可达：关遮罩放行页面，后台准备离线语音（不阻塞）
+    // 云端彻底不可达：关遮罩放行页面（键盘查字照常可用）
     cloudProbeDone = true;
     hideLoadOverlay();
-    toast("云端语音暂不可达，正在后台准备离线语音");
-    if(!engine.asrReady && !engine.asrLoading){ initASREngine(); }
+    toast("语音服务连不上，检查网络后再试");
     setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
   });
 })(2);
