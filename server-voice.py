@@ -320,7 +320,8 @@ def tts_handler():
     if os.path.exists(cache_path) and os.path.getsize(cache_path) > 500:
         try:
             with open(cache_path, "rb") as f:
-                return Response(f.read(), mimetype="audio/mpeg")
+                # 长缓存：同一个字内容不变，iPad 浏览器本地缓存后第二次点击零请求
+                return Response(f.read(), mimetype="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
         except Exception:
             pass
     try:
@@ -332,7 +333,7 @@ def tts_handler():
                 f.write(mp3_data)
         except Exception:
             pass
-        return Response(mp3_data, mimetype="audio/mpeg")
+        return Response(mp3_data, mimetype="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

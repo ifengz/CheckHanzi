@@ -1,0 +1,29 @@
+name: 预生成字典朗读（TTS 预热）
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prewarm:
+    name: edge-tts 全字典预生成
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 执行预热
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s
+' "$SSH_KEY" > ~/.ssh/voice_deploy_key
+          chmod 600 ~/.ssh/voice_deploy_key
+          SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
+          $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /tmp/chazi-prewarm"
+          cat .github/scripts/prewarm_tts.py | $SSH "$SSH_USER@$SSH_HOST" "cat > /tmp/chazi-prewarm/prewarm_tts.py"
+          $SSH "$SSH_USER@$SSH_HOST" "test -f /tmp/chazi-prewarm/char-dict.html || (curl -s http://127.0.0.1/char-dict.html -o /tmp/chazi-prewarm/char-dict.html || cp ${{ secrets.DEPLOY_PATH }}/char-dict.html /tmp/chazi-prewarm/char-dict.html)"
+          $SSH "$SSH_USER@$SSH_HOST" "TTS_CACHE_DIR=/opt/chazi-voice/tts-cache /opt/chazi-voice/venv/bin/python /tmp/chazi-prewarm/prewarm_tts.py /tmp/chazi-prewarm/char-dict.html"
