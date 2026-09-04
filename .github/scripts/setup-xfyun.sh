@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 配置讯飞引擎：三个值由 Actions Secrets 经环境变量传入（日志自动打码），写入 chazi-voice.service 并重启验证
-set -u
+set -eu
 UNIT=chazi-voice.service
 
 fail(){ echo "[xfyun-setup] FATAL: $*"; exit 1; }
