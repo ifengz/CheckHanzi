@@ -552,14 +552,16 @@ function startRecording(){
     var build = function(stream, warm){
       try{ var ctx = audioCtx; var src = ctx.createMediaStreamSource(stream);
         var proc = ctx.createScriptProcessor(4096, 1, 1); var chunks = [];
-        // 快照按下瞬间的写指针：前置缓冲只取这个位置【之前】的数据，避免把正在说的话重复拼进开头
-        var startW = warm && preroll ? preroll.w : -1;
+        // 按下瞬间就【拷贝】前置缓冲数据（不只记指针）：环形缓冲只有 1 秒且录音期间持续被覆盖，
+        // 若等到松手再取，(startW-350ms, startW] 的物理位置早被自己正在说的话重写 → "天呐"变"天呐天呐"
+        var headSnap = (warm && preroll && preroll.filled > 0 && !window.__prerollPaused)
+          ? takePrerollBefore(preroll.w) : new Float32Array(0);
         proc.onaudioprocess = function(ev){ chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
         src.connect(proc); proc.connect(ctx.destination);
         recorder = { stream, src, proc, chunks,
           stop: function(){
-            // 前置缓冲（仅常驻流模式，取按下前 350ms）+ 正式段；不再关闭常驻流
-            var head = (warm && startW >= 0) ? takePrerollBefore(startW) : new Float32Array(0);
+            // 前置缓冲快照（按下瞬间拷贝的 350ms）+ 正式段；不再关闭常驻流
+            var head = headSnap;
             var total = head.length + chunks.reduce(function(a,c){ return a+c.length; },0);
             var all = new Float32Array(total); var off=0;
             all.set(head, off); off += head.length;
