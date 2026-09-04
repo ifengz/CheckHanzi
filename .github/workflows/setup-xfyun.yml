@@ -22,4 +22,4 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/voice_deploy_key
           chmod 600 ~/.ssh/voice_deploy_key
           SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
-          $SSH "$SSH_USER@$SSH_HOST" "bash -s" < .github/scripts/setup-xfyun.sh
+          $SSH "$SSH_USER@$SSH_HOST" "XFYUN_APP_ID='$XFYUN_APP_ID' XFYUN_API_KEY='$XFYUN_API_KEY' XFYUN_API_SECRET='$XFYUN_API_SECRET' bash -s" < .github/scripts/setup-xfyun.sh
