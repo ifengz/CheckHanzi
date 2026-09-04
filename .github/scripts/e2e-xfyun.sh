@@ -12,7 +12,7 @@ if [ -z "$CACHE" ]; then
   $PY - <<'PYEOF'
 import numpy as np, wave, struct
 sr = 16000; dur = 1.0
-t = np.linspace(0, dur, sr*dur, False)
+t = np.linspace(0, dur, int(sr*dur), False)
 # 250Hz 基频 + 共振峰 800/1200Hz 调制，模拟元音
 sig = 0.5*np.sin(2*np.pi*250*t) + 0.3*np.sin(2*np.pi*800*t)*(1+0.5*np.sin(2*np.pi*3*t)) + 0.2*np.sin(2*np.pi*1200*t)
 env = np.minimum(1, 8*np.minimum(t, dur-t))  # 去爆音
@@ -30,7 +30,7 @@ else
     $PY - <<'PYEOF'
 import numpy as np, wave
 sr = 16000; dur = 1.0
-t = np.linspace(0, dur, sr*dur, False)
+t = np.linspace(0, dur, int(sr*dur), False)
 sig = 0.5*np.sin(2*np.pi*250*t) + 0.3*np.sin(2*np.pi*800*t) + 0.2*np.sin(2*np.pi*1200*t)
 data = (sig*np.minimum(1, 8*np.minimum(t, dur-t))*32767*0.6).astype(np.int16)
 w = wave.open("/tmp/e2e_test.wav", "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
