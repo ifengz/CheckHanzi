@@ -537,12 +537,16 @@ function playTTSSamples(samples, sampleRate){
       // 加增益确保音量
       var gain = audioCtx.createGain(); gain.gain.value = 1.6;
       src.connect(gain); gain.connect(audioCtx.destination);
+      // TTS 播报会被常驻麦克风采进环形缓冲，下一轮录音的 350ms 前置会把播报尾巴拼进识别 → 污染。
+      // 播报期间暂停前置缓冲写入，播完 300ms 再恢复（余音散掉）。
+      window.__prerollPaused = true;
+      var resumePreroll = function(){ setTimeout(function(){ window.__prerollPaused = false; }, 300); };
       var stopped = false;
-      var watchdog = setTimeout(function(){ if(!stopped){ stopped = true; playing(false); if(ttsAudioSrc === src) ttsAudioSrc = null; } }, 6000);
-      src.onended = function(){ stopped = true; clearTimeout(watchdog); playing(false); ttsAudioSrc = null; };
-      src.onerror = function(){ stopped = true; clearTimeout(watchdog); playing(false); ttsAudioSrc = null; };
+      var watchdog = setTimeout(function(){ if(!stopped){ stopped = true; playing(false); if(ttsAudioSrc === src) ttsAudioSrc = null; } resumePreroll(); }, 6000);
+      src.onended = function(){ stopped = true; clearTimeout(watchdog); playing(false); ttsAudioSrc = null; resumePreroll(); };
+      src.onerror = function(){ stopped = true; clearTimeout(watchdog); playing(false); ttsAudioSrc = null; resumePreroll(); };
       src.start(); ttsAudioSrc = src;
-    }catch(e){ console.error(e); playing(false); }
+    }catch(e){ console.error(e); playing(false); window.__prerollPaused = false; }
   }
   tryPlay(3);
 }
@@ -567,6 +571,7 @@ function ensureMicStream(){
           // buf = 1 秒（按设备真实采样率，Mac 48k / iPad 16k 或 48k）
           preroll = { buf: new Float32Array(audioCtx.sampleRate || 16000), w: 0, filled: 0 };
           proc.onaudioprocess = function(ev){
+            if(window.__prerollPaused) return; // TTS 播报中，不写入（防播报声进前置缓冲）
             var d = ev.inputBuffer.getChannelData(0);
             for(var i=0;i<d.length;i++){ preroll.buf[preroll.w] = d[i]; preroll.w = (preroll.w+1) % preroll.buf.length; }
             if(preroll.filled < preroll.buf.length) preroll.filled += d.length;
@@ -584,6 +589,7 @@ function ensureMicStream(){
 function takePrerollBefore(startW){
   // 取【按下按钮之前】的 PREROLL_MS 毫秒：(startW - n, startW] 区间，绝不包含按下之后的数据
   if(!audioCtx || !preroll || preroll.filled <= 0) return new Float32Array(0);
+  if(window.__prerollPaused) return new Float32Array(0); // 刚播完 TTS（余音期内），不用前置
   var rate = audioCtx.sampleRate || 16000;
   var n = Math.min(Math.floor(rate * PREROLL_MS / 1000), preroll.filled, preroll.buf.length);
   var out = new Float32Array(n);
