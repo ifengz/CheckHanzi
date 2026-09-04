@@ -689,27 +689,33 @@ function floatToWav(samples, sr){
 }
 function cloudRecognize(samples){
   return new Promise(function(r){
-    var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
     // 先重采样到 16kHz 再上传：默认 audioCtx 是 48kHz，体积 3 倍，弱带宽下光上传就要几秒
     var down = resample(samples, audioCtx.sampleRate, 16000);
-    var fd = new FormData(); fd.append("file", floatToWav(down, 16000), "audio.wav");
-    x.onload = function(){ try{ var d=JSON.parse(x.responseText); if(d.text) r(d.text); else r(""); }catch(e){ r(""); } };
-    x.onerror = function(){ fallback(); };
-    x.ontimeout = function(){ fallback(); };
-    // 云端失败时自动回退本地（本地引擎未就绪则按需加载）
+    var attempts = 0;
+    var sendOnce = function(){
+      attempts++;
+      var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
+      var fd = new FormData(); fd.append("file", floatToWav(down, 16000), "audio.wav");
+      // 空文本是有效结果（没说话/没听清），绝不回退本地——否则每次误触都会触发 78MB 离线模型下载
+      x.onload = function(){ try{ var d = JSON.parse(x.responseText); r((d && d.text) ? d.text.trim() : ""); }catch(e){ r(""); } };
+      x.onerror = x.ontimeout = function(){
+        if(attempts < 2){ setTimeout(sendOnce, 800); return; } // 云端瞬时抖动：先重试一次
+        fallback();
+      };
+      x.send(fd);
+    };
+    // 仅云端真正不可达时才回退本地（本地引擎后台加载，不阻塞页面）
     var fallback = function(){
       if(engine.asrReady){ recognizeAudio(samples).then(r); return; }
-      if(!engine.asrLoading && !engine.asrReady){ initASREngine(); }
+      if(!engine.asrLoading && !engine.asrReady){ toast("云端语音暂不可达，正在准备离线语音…"); initASREngine(); }
       var tries = 0;
       var t = setInterval(function(){
         tries++;
         if(engine.asrReady){ clearInterval(t); recognizeAudio(samples).then(r); }
-        else if(tries > 90){ clearInterval(t); r(""); }
+        else if(tries > 30){ clearInterval(t); r(""); }
       }, 1000);
     };
-    var orig = x.onload; x.onload = function(){ try{ var d=JSON.parse(x.responseText); if(d.text && d.text.trim()){ r(d.text.trim()); return; } }catch(e){} fallback(); };
-    x.onerror = fallback; x.ontimeout = fallback;
-    x.send(fd);
+    sendOnce();
   });
 }
 function stripTone(s){ return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace("ü","v"); }
@@ -1373,19 +1379,38 @@ $("searchInput").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){
 renderHistCount();
 document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
 var crossIsolated = (typeof window.crossOriginIsolated !== "undefined" && window.crossOriginIsolated);
-if(!crossIsolated){ $("warnBanner").style.display = "block"; setTimeout(function(){ if(engine.asrReady || loadTimeoutDone) return; loadTimeoutDone = true; showLoadErr("⚠️ 语音识别无法启动<br>这个页面缺少跨域隔离头（COOP/COEP），语音引擎启动被浏览器拦截。<br>本地开发：用项目里的 dev-server.py 启动，访问 http://127.0.0.1:8000/char-dict.html<br>部署到宝塔：按 README 配置三个响应头后再打开。"); }, 6000); }
-// 探测云端语音代理：可用则跳过本地 78MB 模型下载（页面秒开），断网/失败时按需加载本地回退
-fetch("/api/ping", {cache:"no-store"}).then(function(res){ return res.json(); }).then(function(d){
-  cloudASR = !!(d && d.ok && d.asr);
-  cloudTTS = !!(d && d.ok && d.tts);
-  if(cloudASR || cloudTTS){ hideLoadOverlay(); }
-  if(!cloudASR && !engine.asrReady && !engine.asrLoading){ initASREngine(); }
-  if(!cloudTTS && !engine.ttsReady && !engine.ttsLoading){ setTimeout(function(){ initTTSEngine(); }, 6000); }
-}).catch(function(){
-  // 云端不可达：走本地引擎
-  initASREngine();
-  setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
-});
+if(!crossIsolated){ $("warnBanner").style.display = "block"; setTimeout(function(){ if(engine.asrReady || loadTimeoutDone || cloudProbeDone) return; loadTimeoutDone = true; showLoadErr("⚠️ 语音识别无法启动<br>这个页面缺少跨域隔离头（COOP/COEP），语音引擎启动被浏览器拦截。<br>本地开发：用项目里的 dev-server.py 启动，访问 http://127.0.0.1:8000/char-dict.html<br>部署到宝塔：按 README 配置三个响应头后再打开。"); }, 6000); }
+// 探测云端语音代理（5s 超时 + 失败重试 2 次）：可用则跳过本地 78MB 模型下载（页面秒开）
+// 云端不可达时：页面照常放行（键盘查字可用），离线引擎只在后台准备，绝不把进度条挡在孩子面前
+function pingCloud(){
+  return new Promise(function(resolve){
+    var done = false;
+    var x = new XMLHttpRequest(); x.open("GET", "/api/ping?_t=" + Date.now(), true); x.timeout = 5000;
+    x.onload = function(){ if(done) return; done = true; try{ resolve(JSON.parse(x.responseText)); }catch(e){ resolve(null); } };
+    x.onerror = x.ontimeout = function(){ if(done) return; done = true; resolve(null); };
+    x.send();
+  });
+}
+var cloudProbeDone = false;
+(function probeCloud(retryLeft){
+  pingCloud().then(function(d){
+    if(d && d.ok){
+      cloudASR = !!d.asr; cloudTTS = !!d.tts;
+      cloudProbeDone = true;
+      hideLoadOverlay();
+      if(!cloudASR && !engine.asrReady && !engine.asrLoading){ initASREngine(); }
+      if(!cloudTTS && !engine.ttsReady && !engine.ttsLoading){ setTimeout(function(){ initTTSEngine(); }, 6000); }
+      return;
+    }
+    if(retryLeft > 0){ setTimeout(function(){ probeCloud(retryLeft - 1); }, 1200); return; }
+    // 云端彻底不可达：关遮罩放行页面，后台准备离线语音（不阻塞）
+    cloudProbeDone = true;
+    hideLoadOverlay();
+    toast("云端语音暂不可达，正在后台准备离线语音");
+    if(!engine.asrReady && !engine.asrLoading){ initASREngine(); }
+    setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
+  });
+})(2);
 // 后台预加载笔顺数据（9MB），让详情页首次点击零延迟
 setTimeout(function(){ if(!strokeBundle) fetchJSON("models/strokes/stroke_data.json", function(d){ strokeBundle = d; }, function(){}); }, 2000);
 </script>
