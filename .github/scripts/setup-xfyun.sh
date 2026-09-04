@@ -13,12 +13,14 @@ UPATH=$(systemctl show -p FragmentPath --value "$UNIT")
 echo "[xfyun-setup] unit: $UPATH"
 export UNIT_PATH="$UPATH"
 
-python3 - <<'PYEOF'
+cp "$UPATH" "$UPATH.bak.xfyun"
+
+python3 << 'PYEOF'
 import os, sys
-upath = os.environ.get("UNIT_PATH", "")
-appid = os.environ.get("XFYUN_APP_ID", "")
-key = os.environ.get("XFYUN_API_KEY", "")
-secret = os.environ.get("XFYUN_API_SECRET", "")
+upath = os.environ["UNIT_PATH"]
+appid = os.environ["XFYUN_APP_ID"]
+key = os.environ["XFYUN_API_KEY"]
+secret = os.environ["XFYUN_API_SECRET"]
 lines = open(upath, encoding="utf-8").read().splitlines()
 out, inserted = [], False
 for ln in lines:
@@ -31,14 +33,14 @@ for ln in lines:
         out.append("Environment=XFYUN_API_SECRET=" + secret)
         inserted = True
 if not inserted:
-    print("[xfyun-setup] FATAL: no Service section")
+    print("FATAL: no [Service] section")
     sys.exit(1)
 open(upath, "w", encoding="utf-8").write("
 ".join(out) + "
 ")
 print("[xfyun-setup] unit written (values hidden)")
 PYEOF
-# 去掉占位失败行（python 成功执行到这里说明 unit 已写入）
+echo "[xfyun-setup] python step done"
 systemctl daemon-reload
 systemctl restart "$UNIT"
 echo "[xfyun-setup] restarted, waiting..."
