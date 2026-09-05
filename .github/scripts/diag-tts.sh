@@ -8,6 +8,14 @@ for t in 饭 天 好; do
 done
 echo "=== 2) 缓存文件数 ==="
 ls /opt/chazi-voice/tts-cache/*.mp3 2>/dev/null | wc -l
+echo "=== 2b) sw.js 是否已部署到站点 ==="
+find /www/wwwroot -maxdepth 3 -name "sw.js" 2>/dev/null | head -3 | sed 's/^/  /'
+SW=$(find /www/wwwroot -maxdepth 3 -name "sw.js" 2>/dev/null | head -1)
+if [ -n "$SW" ]; then
+  echo "  sw.js 位于: $SW"
+  DIR=$(dirname "$SW")
+  grep -c "serviceWorker" "$DIR/char-dict.html" 2>/dev/null | sed 's/^/  站点 char-dict.html 含 SW 注册代码处数: /'
+fi
 echo "=== 3) 经 Nginx 全链路（80/443，验证 Cache-Control 透传）==="
 for p in 80 443; do
   echo "  -- 端口 $p --"
