@@ -282,6 +282,12 @@ def whisper_asr(wav_bytes: bytes, lang: str = "zh"):
     text = "".join(s.text for s in segments).strip()
     return postprocess(text), getattr(_info, "duration", 0.0)
 
+def _englishish(text: str) -> bool:
+    """无汉字且 ≥2 个英文字母 → 英文为主（讯飞 zh_cn 对英文常拼错/粘连，值得让 whisper 重认）"""
+    cjk = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
+    letters = sum(1 for c in text if c.isascii() and c.isalpha())
+    return cjk == 0 and letters >= 2
+
 def recognize(wav_bytes: bytes):
     """统一入口：归一化音量 → 讯飞(已配置时) → SenseVoice → whisper，逐级自动回退。返回 (文本, 引擎名, 时长)"""
     wav_bytes = normalize_wav(wav_bytes)   # 儿童小音量先抬到引擎舒适区（一次归一，全链受益）
@@ -289,7 +295,16 @@ def recognize(wav_bytes: bytes):
         try:
             text, dur = xfyun_asr(wav_bytes)
             if text is not None:
-                if text:
+                if text and not _englishish(text):
+                    return text, "xfyun", dur
+                # 空结果 或 英文为主的结果 → 本地补一轮（whisper 英文远好于讯飞 zh_cn）
+                if text and _englishish(text):
+                    try:
+                        wtext, wdur = whisper_asr(wav_bytes, lang=None)
+                        if wtext:
+                            return wtext, "whisper-en", wdur
+                    except Exception as e:
+                        print(f"[asr] whisper 英文重认异常({e})", flush=True)
                     return text, "xfyun", dur
                 # 讯飞空（短音频/音量低/英文词 zh_cn 常空）→ 先本地 SenseVoice（常驻、快），再 whisper 自动语种
                 try:
