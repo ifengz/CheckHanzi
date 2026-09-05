@@ -1,0 +1,30 @@
+name: 英文识别实验（手动）
+
+on:
+  workflow_dispatch:
+
+jobs:
+  exp:
+    name: zh_cn vs en_us 对比
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 执行实验
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          XFYUN_APP_ID: ${{ secrets.XFYUN_APP_ID }}
+          XFYUN_API_KEY: ${{ secrets.XFYUN_API_KEY }}
+          XFYUN_API_SECRET: ${{ secrets.XFYUN_API_SECRET }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/voice_deploy_key
+          chmod 600 ~/.ssh/voice_deploy_key
+          SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
+          $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /tmp/chazi-exp"
+          cat .github/scripts/exp-en-asr.sh | $SSH "$SSH_USER@$SSH_HOST" "cat > /tmp/chazi-exp/exp.sh"
+          $SSH "$SSH_USER@$SSH_HOST" "bash /tmp/chazi-exp/exp.sh"
