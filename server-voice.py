@@ -84,6 +84,28 @@ def wav_bytes_to_samples(wav_bytes: bytes):
         data = w.readframes(w.getnframes())
     return np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0, sr
 
+def samples_to_wav_bytes(samples, sr) -> bytes:
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+        w.writeframes((np.clip(samples, -1, 1) * 32767).astype(np.int16).tobytes())
+    return out.getvalue()
+
+def normalize_wav(wav_bytes: bytes) -> bytes:
+    """儿童说话音量小且忽大忽小：峰值归一到 0.9（增益上限 4x，防把底噪放大）。
+    日志实测 0.5~1s 短音频大量空结果，主因就是音量低于引擎灵敏度阈值"""
+    try:
+        samples, sr = wav_bytes_to_samples(wav_bytes)
+    except Exception:
+        return wav_bytes
+    if not samples.size:
+        return wav_bytes
+    peak = float(np.max(np.abs(samples)))
+    if peak < 0.02 or peak >= 0.9:   # 纯底噪不放大；本来就够响不动
+        return wav_bytes
+    gain = min(0.9 / peak, 4.0)
+    return samples_to_wav_bytes(samples * gain, sr)
+
 # ── 讯飞语音听写（商业引擎，可选）──────────────────────────────
 # 开通：https://www.xfyun.cn → 控制台 → 创建应用（语音听写流式版，领取免费包）
 # 环境变量：XFYUN_APP_ID / XFYUN_API_KEY / XFYUN_API_SECRET（三者都设置才启用）
@@ -261,14 +283,21 @@ def whisper_asr(wav_bytes: bytes, lang: str = "zh"):
     return postprocess(text), getattr(_info, "duration", 0.0)
 
 def recognize(wav_bytes: bytes):
-    """统一入口：讯飞(已配置时) → SenseVoice → whisper，逐级自动回退。返回 (文本, 引擎名, 时长)"""
+    """统一入口：归一化音量 → 讯飞(已配置时) → SenseVoice → whisper，逐级自动回退。返回 (文本, 引擎名, 时长)"""
+    wav_bytes = normalize_wav(wav_bytes)   # 儿童小音量先抬到引擎舒适区（一次归一，全链受益）
     if XFYUN_ENABLED:
         try:
             text, dur = xfyun_asr(wav_bytes)
             if text is not None:
                 if text:
                     return text, "xfyun", dur
-                # 讯飞返回空（中文短语听不清 / 英文单词 zh_cn 引擎常为空）→ whisper 自动语种补一轮
+                # 讯飞空（短音频/音量低/英文词 zh_cn 常空）→ 先本地 SenseVoice（常驻、快），再 whisper 自动语种
+                try:
+                    stext, sdur = sensevoice_asr(wav_bytes)
+                    if stext:
+                        return stext, "sensevoice", sdur
+                except Exception as e:
+                    print(f"[asr] sensevoice 补识别异常({e})", flush=True)
                 try:
                     wtext, wdur = whisper_asr(wav_bytes, lang=None)
                     if wtext:
