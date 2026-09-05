@@ -235,16 +235,16 @@ def get_whisper():
                 globals()["ENGINE_STATUS"] = "faster-whisper(" + WHISPER_MODEL + ")（回退）"
     return _whisper_model
 
-def whisper_asr(wav_bytes: bytes):
-    """faster-whisper 识别，返回 (文本, 时长秒)"""
+def whisper_asr(wav_bytes: bytes, lang: str = "zh"):
+    """faster-whisper 识别，返回 (文本, 时长秒)；lang 传 None 让 whisper 自动检测（英文词兜底用）"""
     model = get_whisper()
     segments, _info = model.transcribe(
         io.BytesIO(wav_bytes),
-        language="zh",
+        language=lang,
         vad_filter=True,
         beam_size=1,
         condition_on_previous_text=False,
-        initial_prompt="以下是普通话的词语。",
+        initial_prompt=None if lang is None else "以下是普通话的词语。",
     )
     text = "".join(s.text for s in segments).strip()
     return postprocess(text), getattr(_info, "duration", 0.0)
@@ -255,6 +255,15 @@ def recognize(wav_bytes: bytes):
         try:
             text, dur = xfyun_asr(wav_bytes)
             if text is not None:
+                if text:
+                    return text, "xfyun", dur
+                # 讯飞返回空（中文短语听不清 / 英文单词 zh_cn 引擎常为空）→ whisper 自动语种补一轮
+                try:
+                    wtext, wdur = whisper_asr(wav_bytes, lang=None)
+                    if wtext:
+                        return wtext, "whisper-en", wdur
+                except Exception as e:
+                    print(f"[asr] whisper 补识别异常({e})", flush=True)
                 return text, "xfyun", dur
         except Exception as e:
             print(f"[asr] 讯飞异常({e})，回退本地引擎", flush=True)
