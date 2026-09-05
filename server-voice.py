@@ -67,9 +67,13 @@ def to_simplified(text: str) -> str:
         return text
 
 def postprocess(text: str) -> str:
-    """公共后处理：去识别标签/标点 → 繁转简 → 数字转汉字"""
+    """公共后处理：去识别标签/标点 → 繁转简 → 数字转汉字。
+    空格只删「非英文语境」的：英文词间空格必须保留（"ice cream" 不能被拼成 "icecream"），
+    汉字/拼音之间的空格照删（短语音识别常带句号、词间空格）"""
     text = re.sub(r"<\|[^|]*\|>", "", text)      # SenseVoice 语言/情感标签 <|zh|><|NEUTRAL|>…
-    text = re.sub(r"[。．，、；？！?!,.;:：''\"…\s]+", "", text)  # 短语音识别常带句号
+    text = re.sub(r"[。．，、；？！?!,.;:：''\"…]+", "", text)  # 短语音识别常带句号（英文词不含 . ,，可安全删）
+    text = re.sub(r"(?<![A-Za-z])\s+(?![A-Za-z])", "", text)  # 两侧都不是英文单词的空格 → 删
+    text = re.sub(r"\s{2,}", " ", text).strip()               # 多余空格归一
     text = to_simplified(text)
     return digits_to_cn(text).strip()
 
@@ -236,13 +240,14 @@ def get_whisper():
     return _whisper_model
 
 def whisper_asr(wav_bytes: bytes, lang: str = "zh"):
-    """faster-whisper 识别，返回 (文本, 时长秒)；lang 传 None 让 whisper 自动检测（英文词兜底用）"""
+    """faster-whisper 识别，返回 (文本, 时长秒)；lang 传 None 让 whisper 自动检测（英文词兜底用）。
+    英文兜底走 beam=5：短音频（单词级）贪心解码极易错，多候选打分明显更准"""
     model = get_whisper()
     segments, _info = model.transcribe(
         io.BytesIO(wav_bytes),
         language=lang,
         vad_filter=True,
-        beam_size=1,
+        beam_size=1 if lang == "zh" else 5,
         condition_on_previous_text=False,
         initial_prompt=None if lang is None else "以下是普通话的词语。",
     )

@@ -285,7 +285,7 @@ function toast(msg){
 var engine = { asrReady:false, ttsReady:false, asrLoading:false, ttsLoading:false, module:null };
 var cloudASR = false; // 云端识别是否可用
 var cloudTTS = false; // 云端朗读是否可用
-var ASSET_VER = "v7"; // 资源版本号：改版后加号，强制浏览器（尤其 iPad Safari）重新下载，避免缓存旧文件
+var ASSET_VER = "v8"; // 资源版本号：改版后加号，强制浏览器（尤其 iPad Safari）重新下载，避免缓存旧文件
 var engineActive = null;
 function fetchModel(url, label, onProgress){
   return new Promise(function(resolve, reject){
@@ -422,12 +422,30 @@ function speak(text, btn){
     u.onerror = function(){ if(typeof playing === "function") playing(false); else if(btn) btn.classList.remove("playing"); };
     speechSynthesis.cancel(); speechSynthesis.speak(u);
   }
-  if(!engine.ttsReady){ playing(true); if(engine.ttsLoading){ toast("正在加载语音…"); ttsPending.push({text, btn}); return; }
-    initTTSEngine().then(function(){ if(engine.ttsReady) speak(text, btn); else{ playing(false); systemSpeak(); } }).catch(function(){ playing(false); systemSpeak(); }); return;
-  }
   // 朗读缓存：同一个字第二次点直接播，零延迟
   if(ttsCache[text]){ playTTSSamples(ttsCache[text].samples, ttsCache[text].sampleRate); return; }
-  // 云端 TTS 优先（edge-tts 微软晓晓，免费无限高质量）
+  // 本地引擎生成（仅在云端不可用时才走到这里；首次会触发本地模型下载）
+  function doLocalGenerate(t, b){
+    if(!ttsWorker){ systemSpeak(); return; }
+    try{ try{ speechSynthesis.cancel(); }catch(e){}
+      if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc = null; }
+      if(b) b.classList.add("playing"); else playing(true);
+      document.querySelectorAll(".playing").forEach(function(el){ if(el !== b && el !== btn) el.classList.remove("playing"); });
+      window.__ttsPlayingBtn = b || btn; window.__currentTTSText = t;
+      ttsWorker.postMessage({type:"generate", text: t, sid: 0, speed: 1.0});
+    }catch(e){ console.error(e); playing(false); systemSpeak(); }
+  }
+  // 确保本地引擎就绪再朗读：未就绪才触发下载（云端可用时永远走不到这里，省 116MB）
+  function ensureLocalThenSpeak(t, b){
+    if(ttsCache[t]){ playTTSSamples(ttsCache[t].samples, ttsCache[t].sampleRate); return; }
+    if(engine.ttsReady){ doLocalGenerate(t, b); return; }
+    playing(true);
+    if(engine.ttsLoading){ toast("正在加载语音…"); ttsPending.push({text:t, btn:b}); return; }
+    initTTSEngine().then(function(){ if(engine.ttsReady) doLocalGenerate(t, b); else { playing(false); systemSpeak(); } })
+                    .catch(function(){ playing(false); systemSpeak(); });
+  }
+  // 云端 TTS 优先（edge-tts 微软晓晓 + SW/磁盘缓存，毫秒级，无需下载本地模型）
+  // 关键：云端路径绝不以本地引擎就绪为前提——否则每次点喇叭都要先下 116MB 本地模型才出声（"语音加载慢"根因）
   if(!window.__speakCloudDisabled){
     var _ttsT0 = Date.now();
     var x = new XMLHttpRequest(); x.open("GET","/api/tts?text="+encodeURIComponent(text),true); x.responseType="arraybuffer"; x.timeout=6000;
@@ -439,30 +457,15 @@ function speak(text, btn){
           playing(true); var b = x.response;
           audioCtx.decodeAudioData(b).then(function(buf){
             playTTSSamples(buf.getChannelData(0), buf.sampleRate); ttsCache[text] = {samples:buf.getChannelData(0), sampleRate:buf.sampleRate};
-          }).catch(function(){ playing(false); speakLocal(text,btn); });
-        }catch(e){ playing(false); speakLocal(text,btn); }
-      } else { speakLocal(text,btn); }
+          }).catch(function(){ playing(false); ensureLocalThenSpeak(text, btn); });
+        }catch(e){ playing(false); ensureLocalThenSpeak(text, btn); }
+      } else { ensureLocalThenSpeak(text, btn); }
     };
-    x.onerror = function(){ speakLocal(text,btn); };
-    x.ontimeout = function(){ speakLocal(text,btn); };
+    x.onerror = function(){ ensureLocalThenSpeak(text, btn); };
+    x.ontimeout = function(){ ensureLocalThenSpeak(text, btn); };
     x.send(); return;
   }
-  function speakLocal(t,b){ if(!ttsWorker){ systemSpeak(); return; }
-    try{ try{ speechSynthesis.cancel(); }catch(e){}
-      if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc = null; }
-      if(b) b.classList.add("playing"); else if(t) playing(true);
-      document.querySelectorAll(".playing").forEach(function(el){ if(el !== b && el !== btn) el.classList.remove("playing"); });
-      window.__ttsPlayingBtn = b || btn; window.__currentTTSText = t;
-      ttsWorker.postMessage({type:"generate", text: t, sid: 0, speed: 1.0});
-    }catch(e){ console.error(e); playing(false); systemSpeak(); }
-  }
-  if(!ttsWorker){ systemSpeak(); return; }
-  try{
-    try{ speechSynthesis.cancel(); }catch(e){}
-    if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc = null; }
-    playing(true); document.querySelectorAll(".playing").forEach(function(el){ if(el !== btn) el.classList.remove("playing"); }); window.__ttsPlayingBtn = btn;
-    window.__currentTTSText = text; ttsWorker.postMessage({type:"generate", text: text, sid: 0, speed: 1.0});
-  }catch(e){ console.error(e); playing(false); systemSpeak(); }
+  ensureLocalThenSpeak(text, btn);
 }
 function playTTSSamples(samples, sampleRate){
   var btn = window.__ttsPlayingBtn || null; window.__ttsPlayingBtn = null;
@@ -1059,6 +1062,17 @@ function handleVoiceResult(text){
     var list = PINYIN[key].filter(function(c){ return DICT[c]; });
     if(toneFromPy) list = rankByTone(list, toneFromPy); // 软排序：同声调排前、其余保留（孩子声调常不准，硬过滤会误杀）
     showVoiceResults(list, text, toneFromPy);
+    return;
+  }
+  // 英文单词兜底：识别出纯英文（here/hear 等）→ 回显给孩子确认，而不是"没听清"
+  var enWords = text.replace(/[^A-Za-z\s]/g,"").trim().split(/\s+/).filter(function(w){ return w.length >= 2; });
+  if(enWords.length){
+    $("rTitle").textContent = "🔤 听到的是：";
+    $("rSub").textContent = "这里只收汉字哦，按住下面的按钮说中文或拼音再试";
+    var echo = $("voiceEcho"); echo.style.display = "block";
+    var et = $("voiceEchoTxt"); if(et) et.textContent = enWords.join(" ");
+    $("home").style.display = "none"; $("detail").classList.remove("show"); $("history").classList.remove("show"); $("results").classList.add("show");
+    $("resultChars").innerHTML = ""; $("resultChars").style.display = "none";
     return;
   }
   toast("没听清，请再说一遍");
