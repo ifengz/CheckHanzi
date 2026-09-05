@@ -34,7 +34,7 @@
   function createEnglishLookup(config){
     var root = config.root;
     var toggle = config.toggle;
-    var state = { seq:0, controller:null, timeoutId:null, lastQuery:"", sentence:null, wordFromSentence:false };
+    var state = { seq:0, controller:null, timeoutId:null, lastQuery:"", sentence:null, wordFromSentence:false, fromHistory:false, skipHistory:false, result:null, resultQuery:"", resultFromSentence:false };
     var status = node("div", "english-status");
     status.setAttribute("role", "status");
     var resultBox = node("div", "english-result");
@@ -55,6 +55,11 @@
       state.lastQuery = "";
       state.sentence = null;
       state.wordFromSentence = false;
+      state.fromHistory = false;
+      state.skipHistory = false;
+      state.result = null;
+      state.resultQuery = "";
+      state.resultFromSentence = false;
       status.textContent = "";
       resultBox.textContent = "";
     }
@@ -95,8 +100,20 @@
           config.cancelSpeech();
           state.lastQuery = state.sentence.text;
           state.wordFromSentence = false;
+          state.result = state.sentence.result;
+          state.resultQuery = state.sentence.text;
+          state.resultFromSentence = false;
           renderSentence(state.sentence.result, state.sentence.text);
         }
+      });
+      return button;
+    }
+
+    function historyBackButton(){
+      var button = buttonWithIcon(config, "english-back", "arrow-left", "返回历史", "返回历史");
+      button.addEventListener("click", function(){
+        config.cancelSpeech();
+        if(config.onHistoryBack) config.onHistoryBack();
       });
       return button;
     }
@@ -107,6 +124,7 @@
       head.appendChild(node("span", "english-kind", "单词"));
       head.appendChild(speakButton(result.word));
       if(fromSentence) head.appendChild(backButton());
+      if(state.fromHistory) head.appendChild(historyBackButton());
       resultBox.appendChild(head);
       resultBox.appendChild(node("div", "english-word", result.word));
       if(typeof result.phonetic === "string" && result.phonetic){
@@ -149,7 +167,7 @@
           button.type = "button";
           button.setAttribute("aria-label", "查询 " + word);
           button.addEventListener("click", function(){
-            lookup(word, true);
+          lookup(word, true, state.fromHistory, false);
           });
           fragment.appendChild(button);
         })(match[0]);
@@ -166,6 +184,7 @@
       var head = node("div", "english-result-head");
       head.appendChild(node("span", "english-kind", "句子"));
       head.appendChild(speakButton(text));
+      if(state.fromHistory) head.appendChild(historyBackButton());
       resultBox.appendChild(head);
       var original = node("div", "english-sentence");
       original.appendChild(sentenceTokens(text));
@@ -180,31 +199,59 @@
       var row = node("div", "english-error");
       row.appendChild(node("span", "english-error-message", message || "查询失败"));
       var retry = buttonWithIcon(config, "english-retry", "rotate-ccw", "重试", "重试");
-      retry.addEventListener("click", function(){ lookup(state.lastQuery, state.wordFromSentence); });
+      retry.addEventListener("click", function(){ lookup(state.lastQuery, state.wordFromSentence, state.fromHistory, state.skipHistory); });
       row.appendChild(retry);
       if(state.sentence && state.wordFromSentence) row.appendChild(backButton());
+      if(state.fromHistory) row.appendChild(historyBackButton());
       resultBox.appendChild(row);
     }
 
+    function validResult(result){
+      if(!result || (result.kind !== "word" && result.kind !== "sentence")) return false;
+      if(result.kind === "word") return typeof result.word === "string" && !!result.word.trim();
+      return typeof result.translation === "string";
+    }
+
+    function historyRecord(result, query){
+      var record = {query:query, kind:result.kind, t:Date.now()};
+      if(result.kind === "word"){
+        record.word = result.word;
+        if(typeof result.phonetic === "string") record.phonetic = result.phonetic;
+        if(Array.isArray(result.meanings)) record.meanings = result.meanings;
+      }else{
+        record.translation = result.translation;
+      }
+      if(result.source && typeof result.source === "object") record.source = result.source;
+      return record;
+    }
+
     function renderResult(result, query, fromSentence){
-      if(!result || (result.kind !== "word" && result.kind !== "sentence")){
+      if(!validResult(result)){
         renderError("查询结果格式不正确");
-        return;
+        return false;
       }
       if(result.kind === "word"){
         config.prefetchTTS(result.word, "en").catch(function(){});
         renderWord(result, fromSentence);
-        return;
+      }else{
+        config.prefetchTTS(query, "en").catch(function(){});
+        renderSentence(result, query);
       }
-      config.prefetchTTS(query, "en").catch(function(){});
-      renderSentence(result, query);
+      state.result = result;
+      state.resultQuery = query;
+      state.resultFromSentence = !!fromSentence;
+      if(!state.skipHistory && config.onHistorySave) config.onHistorySave(historyRecord(result, query));
+      if(!state.skipHistory && config.onHistoryCount) config.onHistoryCount();
+      return true;
     }
 
-    function lookup(query, fromSentence){
+    function lookup(query, fromSentence, fromHistory, skipHistory){
       if(typeof query !== "string" || !query.trim()) return;
       abortPending();
       config.cancelSpeech();
       if(!fromSentence){ state.sentence = null; state.wordFromSentence = false; }
+      state.fromHistory = !!fromHistory;
+      state.skipHistory = skipHistory === undefined ? !!fromHistory : !!skipHistory;
       if(Array.from(query).length > 300 || utf8Bytes(query) > 500){
         state.lastQuery = query;
         state.wordFromSentence = !!fromSentence;
@@ -217,6 +264,8 @@
       state.controller = controller;
       state.lastQuery = query;
       state.wordFromSentence = !!fromSentence;
+      state.fromHistory = !!fromHistory;
+      state.skipHistory = skipHistory === undefined ? !!fromHistory : !!skipHistory;
       root.hidden = false;
       status.textContent = "正在查询…";
       resultBox.textContent = "";
@@ -253,6 +302,54 @@
 
     function lookupLanguageIsEnglish(){ return config.isEnglish ? config.isEnglish() : true; }
 
+    function cancelPending(){
+      abortPending();
+      config.cancelSpeech();
+      status.textContent = "";
+    }
+
+    function viewSnapshot(){
+      return {
+        result: state.result,
+        query: state.resultQuery,
+        fromSentence: state.resultFromSentence,
+        sentence: state.sentence,
+        wordFromSentence: state.wordFromSentence,
+        fromHistory: state.fromHistory,
+        skipHistory: state.skipHistory
+      };
+    }
+
+    function restoreView(snapshot){
+      abortPending();
+      config.cancelSpeech();
+      if(!snapshot || !snapshot.result){
+        state.lastQuery = "";
+        state.sentence = null;
+        state.wordFromSentence = false;
+        state.fromHistory = false;
+        state.skipHistory = false;
+        state.result = null;
+        state.resultQuery = "";
+        state.resultFromSentence = false;
+        status.textContent = "";
+        resultBox.textContent = "";
+        return false;
+      }
+      state.lastQuery = snapshot.query || "";
+      state.result = snapshot.result;
+      state.resultQuery = snapshot.query || "";
+      state.resultFromSentence = !!snapshot.fromSentence;
+      state.sentence = snapshot.sentence || null;
+      state.wordFromSentence = !!snapshot.wordFromSentence;
+      state.fromHistory = !!snapshot.fromHistory;
+      state.skipHistory = !!snapshot.skipHistory;
+      status.textContent = "";
+      if(snapshot.result.kind === "word") renderWord(snapshot.result, !!snapshot.fromSentence);
+      else renderSentence(snapshot.result, snapshot.query || "");
+      return true;
+    }
+
     function setLanguage(language){
       var isEnglish = language === "en";
       toggle.querySelectorAll("[data-language]").forEach(function(button){
@@ -268,8 +365,8 @@
       button.addEventListener("click", function(){ setLanguage(button.getAttribute("data-language")); });
     });
     root.hidden = true;
-    return { lookup:lookup, clear:clear, handleRecognition:function(text){
-      lookup(text, false);
+    return { lookup:lookup, clear:clear, cancelPending:cancelPending, viewSnapshot:viewSnapshot, restoreView:restoreView, handleRecognition:function(text){
+      lookup(text, false, false, false);
     }, setLanguage:setLanguage };
   }
 

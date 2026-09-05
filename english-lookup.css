@@ -29,6 +29,12 @@
 .english-source{display:flex;align-items:center;gap:8px;color:#8E7550;font-size:16px;min-height:28px;}
 .english-source-name{font-weight:700;}
 .english-source-link{color:#4A7CFF;font-weight:700;}
+.english-history{min-width:0;}
+.english-history-main{flex:1;min-width:0;}
+.english-history-word{font-size:26px;line-height:1.3;font-weight:700;overflow-wrap:anywhere;word-break:break-word;}
+.english-history-phonetic{font-size:24px;line-height:1.3;color:#BB8C4F;overflow-wrap:anywhere;}
+.english-history-summary{font-size:20px;line-height:1.35;color:#5A5048;overflow-wrap:anywhere;}
+.english-history-date{display:block;font-size:14px;line-height:1.4;color:#B8A080;}
 .english-error{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px;border:2px solid #FF8C42;border-radius:8px;background:#FFF0E6;color:#8A4B00;font-size:18px;}
 .english-error-message{flex:1 1 220px;overflow-wrap:anywhere;}
 #home button:focus-visible,.english-more-summary:focus-visible,.english-token:focus-visible{outline:3px solid #176476;outline-offset:2px;}

@@ -146,15 +146,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .char-card.sent-miss{opacity:.45;cursor:not-allowed;}
 #historyList{flex:1;overflow-y:auto;padding:0 0 12px;}
 .h-item{display:flex;align-items:center;gap:clamp(10px,1.5vh,16px);border:3px solid #F0E0C8;border-radius:clamp(16px,2vh,20px);padding:clamp(10px,1.5vh,16px) clamp(12px,2vw,18px);margin-bottom:clamp(6px,1vh,12px);background:#fff;box-shadow:0 3px 10px rgba(0,0,0,.04);}
-.h-item .zi{font-size:clamp(32px,4.5vh,44px);font-weight:700;width:clamp(40px,6vh,56px);text-align:center;font-family:"Kaiti SC",STKaiti,serif;flex-shrink:0;}
+.h-item .zi{font-size:48px;line-height:1.5;font-weight:400;width:56px;text-align:center;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;flex-shrink:0;}
 .h-item .info{flex:1;min-width:0;}
-.h-item .info b{font-size:clamp(16px,2.2vh,20px);display:block;font-weight:700;}
+.h-item .info b{font-size:24px;line-height:1.25;display:block;font-weight:400;overflow-wrap:anywhere;}
 .h-item .info span{font-size:clamp(12px,1.6vh,14px);color:#B8A080;}
-.h-item .mini-spk{width:clamp(40px,5vh,56px);height:clamp(40px,5vh,56px);border-radius:50%;border:3px solid #F0E0C8;background:#fff;color:#2D2A26;font-size:clamp(18px,2.5vh,24px);flex-shrink:0;}
+.h-item .mini-spk{width:56px;height:56px;border-radius:8px;border:3px solid #F0E0C8;background:#fff;color:#2D2A26;font-size:clamp(18px,2.5vh,24px);flex-shrink:0;}
 .h-item .mini-spk.playing{background:#4CAF7D;border-color:#4CAF7D;color:#fff;}
+.history-word-item .history-word{font-size:32px;line-height:1.5;font-weight:400;overflow-wrap:anywhere;word-break:break-word;}
+.history-word-item .info{flex:1;min-width:0;}
 .spk.loading,.mini-spk.loading,.word-card.loading,#detailChar.loading{background:#E7F1FC;outline:3px solid #528BBF;outline-offset:2px;}
 #detailChar.playing{color:#C65E00;}
 .h-empty{text-align:center;color:#B8A080;font-size:clamp(16px,2.2vh,18px);margin-top:clamp(30px,5vh,60px);line-height:2;}
+#historyConfirm{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(45,42,38,.55);}
+#historyConfirm[hidden]{display:none;}
+#historyConfirm:not([hidden]){display:flex;}
+.history-confirm-card{width:min(420px,100%);padding:24px;border-radius:8px;background:#fff;color:#2D2A26;text-align:center;font-size:24px;font-weight:700;box-shadow:0 12px 36px rgba(0,0,0,.2);}
+.history-confirm-actions{display:flex;gap:12px;margin-top:22px;}
+.history-confirm-actions button{flex:1;min-height:56px;padding:10px 14px;border:0;border-radius:8px;font-size:20px;font-weight:800;cursor:pointer;}
+#historyCancel{background:#F0E9DF;color:#5A5048;}
+#historyConfirmOk{background:#FF7A00;color:#fff;}
 /* 语音浮层 */
 #voiceSheet{position:fixed;left:0;right:0;top:0;bottom:0;z-index:50;background:rgba(45,42,38,.8);display:none;flex-direction:column;align-items:center;justify-content:center;}
 #voiceSheet.show{display:flex;}
@@ -229,13 +239,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
     <button type="button" role="tab" data-language="en" aria-selected="false">English</button>
   </div>
   <button id="recBtn" aria-label="按住说话查字"><span class="mic" data-lucide="mic"></span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-dots"><i></i><i></i><i></i></span><span class="rec-txt">松开 查字</span></span></button>
-  <button id="historyBtn">📖 查过的字 <span class="n" id="histCount"></span></button>
+  <button id="historyBtn">📖 查过的内容 <span class="n" id="histCount"></span></button>
   <div id="warnBanner">⚠️ 语音功能未就绪，请检查网络后重试。<button id="voiceRetry" type="button">重试</button></div>
 </div>
 
 <main id="lookupWorkspace">
   <div id="results">
-    <div class="page-head"><button id="resBack">‹ 返回</button><span class="brand">查字宝</span><button id="resHistBtn" class="hist-btn" aria-label="查过的字">📖 <span id="resHistCount"></span></button></div>
+    <div class="page-head"><button id="resBack">‹ 返回</button><span class="brand">查字宝</span><button id="resHistBtn" class="hist-btn" aria-label="查过的内容">📖 <span id="resHistCount"></span></button></div>
     <div id="voiceEcho" style="display:none;margin:4px 12px 0;padding:6px 10px;background:#FFF3E0;border-radius:12px;font-size:clamp(13px,1.8vh,15px);color:#8D6E63;line-height:1.5;flex-shrink:0;"><b style="color:#FF7A00;">🗣</b> <span id="voiceEchoTxt"></span></div>
     <div class="r-title" id="rTitle" style="font-size:clamp(16px,2.2vh,22px);margin:clamp(2px,.3vh,6px) 0 0;">📖 你读的是哪个字？</div>
     <div class="r-sub" id="rSub" style="font-size:clamp(12px,1.6vh,16px);">点一下就能看笔顺和部首</div>
@@ -245,7 +255,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   </div>
 
   <div id="detail">
-    <div class="page-head"><button id="backBtn">‹ 返回</button><button id="detHistBtn" class="hist-btn" aria-label="查过的字">📖 <span id="detHistCount"></span></button></div>
+    <div class="page-head"><button id="backBtn">‹ 返回</button><button id="detHistBtn" class="hist-btn" aria-label="查过的内容">📖 <span id="detHistCount"></span></button></div>
     <div id="detailBody">
       <div class="char-hero">
         <div id="detailPinyin"></div>
@@ -263,12 +273,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   </div>
 
   <div id="history">
-    <div class="page-head"><button id="histBack">‹ 返回</button><span class="brand">查字宝</span><button id="clearHistory">清空</button></div>
+    <div class="page-head"><button id="histBack">‹ 返回</button><span class="brand" id="historyTitle">汉字记录</span><button id="clearHistory">清空汉字记录</button></div>
     <div id="historyList"></div>
   </div>
 
   <div id="englishLookupRoot" hidden></div>
 </main>
+</div>
+
+<div id="historyConfirm" hidden>
+  <div class="history-confirm-card" role="dialog" aria-modal="true" aria-labelledby="historyConfirmText">
+    <div id="historyConfirmText">清空汉字记录？</div>
+    <div class="history-confirm-actions"><button id="historyCancel" type="button">取消</button><button id="historyConfirmOk" type="button">清空</button></div>
+  </div>
 </div>
 
 <div id="recStatusPill"><span class="pill-wave"><i></i><i></i><i></i><i></i><i></i></span><span id="pillTxt">松开 查字</span></div>
@@ -302,11 +319,14 @@ var characterStrokeChars = "";
   characterStrokeChars = typeof ext.strokeChars === "string" ? ext.strokeChars : "";
 })(typeof CHARACTER_DATA === "object" ? CHARACTER_DATA : null);
 
-var mode = "cn"; var current = null; var currentHomophones = []; var histList = [];
+var mode = "cn"; var current = null; var currentHomophones = []; var histList = []; var englishHistList = []; var resultsFromHistory = false; var resultsView = null;
 var lookupLanguage = "zh"; var englishLookupController = null;
-try{ histList = JSON.parse(localStorage.getItem("chazi_history")||"[]"); }catch(e){}
-if(!Array.isArray(histList)) histList = [];
-function saveHistory(){ try{ localStorage.setItem("chazi_history", JSON.stringify(histList)); }catch(e){} }
+function loadHistory(key){ try{ var value = JSON.parse(localStorage.getItem(key)||"[]"); return Array.isArray(value) ? value : []; }catch(e){ return []; } }
+histList = loadHistory("chazi_history");
+englishHistList = loadHistory("english_history");
+function saveHistoryList(key, list){ try{ localStorage.setItem(key, JSON.stringify(list)); return true; }catch(e){ toast("历史记录保存失败"); return false; } }
+function saveHistory(){ return saveHistoryList("chazi_history", histList); }
+function saveEnglishHistory(){ return saveHistoryList("english_history", englishHistList); }
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 var toastTimer = null;
@@ -667,14 +687,23 @@ function showWorkspace(page){
   var english = $("englishLookupRoot");
   if(english) english.hidden = page !== "english";
 }
-function showResultsPage(chars, toneNum){
+function showResultsPage(chars, toneNum, fromHistory, preserveAll){
   cancelSpeech();
+  resultsFromHistory = !!fromHistory;
+  resultsView = {kind:"candidates", chars:Array.from(chars), toneNum:toneNum || 0, fromHistory:!!fromHistory, preserveAll:!!preserveAll};
   showWorkspace("results");
   var _rc = $("resultChars"); if(_rc) _rc.style.display = "";
   prefetchTTSList(chars, 4);
   var box = $("resultChars"); box.innerHTML = "";
   chars.forEach(function(ch){
-    var data = DICT[ch]; if(!data) return;
+    var data = DICT[ch];
+    if(!data && !preserveAll) return;
+    if(!data){
+      var missing = document.createElement("div"); missing.className = "char-card sent-miss";
+      missing.innerHTML = '<div class="zi">'+esc(ch)+'</div><div class="py">词库暂无</div>';
+      box.appendChild(missing);
+      return;
+    }
     var py = Array.isArray(data.p) ? data.p[0] : data.p;
     if(toneNum){ // 多音字：显示孩子指定的那个声调的读音
       var pys = Array.isArray(data.p) ? data.p : [data.p];
@@ -689,13 +718,13 @@ function showResultsPage(chars, toneNum){
     }
     var card = document.createElement("div"); card.className = "char-card";
     card.innerHTML = '<div class="zi">'+esc(ch)+'</div><div class="py">'+esc(py)+'</div>'+(hint ? '<div class="hint-word">'+esc(hint)+'</div>' : '')+'<button class="spk" aria-label="读一读">🔊</button>';
-    card.onclick = function(){ current = ch; detailFrom = "results"; addHistory(ch); renderDetail(toneNum); };
+    card.onclick = function(){ current = ch; detailFrom = resultsFromHistory ? "history" : "results"; addHistory(ch); renderDetail(toneNum); };
     card.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(ch, this); };
     box.appendChild(card);
   });
   requestAnimationFrame(function(){ requestAnimationFrame(fitResultCards); });
 }
-$("resBack").addEventListener("click", function(){ cancelSpeech(); showWorkspace(null); });
+$("resBack").addEventListener("click", function(){ cancelSpeech(); if(resultsFromHistory){ resultsFromHistory = false; showWorkspace("history"); restoreHistoryScroll(); }else showWorkspace(null); });
 // Size each glyph to its actual card; additional candidates remain scrollable.
 function fitResultCards(){
   var chars = $("resultChars"); if(!chars) return;
@@ -843,12 +872,11 @@ function renderWords(data){
     var card = document.createElement("div"); card.className = "word-card";
     var hi = word.split("").map(function(c){ return c===current ? "<u>"+esc(c)+"</u>" : esc(c); }).join("");
     card.innerHTML = '<div class="w">'+hi+'</div>';
-    card.onclick = function(){ speak(word, card); };
+    card.onclick = function(){ addHistory(current, word); speak(word, card); };
     box.appendChild(card);
   });
   requestAnimationFrame(function(){ requestAnimationFrame(fitResultCards); });
 }
-function addHistory(ch){ histList = histList.filter(function(x){ return x.c !== ch; }); histList.unshift({c:ch, t:Date.now()}); if(histList.length > 50) histList.pop(); saveHistory(); // 按压反馈：iOS Safari 的 :active 不可靠，用 pointerdown/up 加 pressed 类保证点击有动效
 document.addEventListener("pointerdown", function(e){
   var t = e.target.closest(".char-card,.word-card,#detailChar,.stroke-cell");
   if(t){ t.classList.add("pressed"); }
@@ -861,44 +889,207 @@ document.addEventListener("pointercancel", function(e){
   var t = e.target.closest(".char-card,.word-card,#detailChar,.stroke-cell");
   if(t){ t.classList.remove("pressed"); }
 }, {passive:true});
-renderHistCount(); }
-function renderHistCount(){ $("histCount").textContent = histList.length ? "（"+histList.length+"）" : ""; var r = $("resHistCount"); if(r) r.textContent = histList.length ? "（"+histList.length+"）" : ""; }
+function addHistory(ch, word){
+  var previous = histList;
+  var key = word ? "w:" + word : "c:" + ch;
+  histList = histList.filter(function(x){ return (x && x.w ? "w:" + x.w : "c:" + x.c) !== key; });
+  var record = {c:ch, t:Date.now()}; if(word) record.w = word;
+  histList.unshift(record);
+  if(histList.length > 50) histList.pop();
+  if(!saveHistory()) histList = previous;
+  renderHistCount();
+}
+function saveEnglishRecord(record){
+  if(!record || typeof record.query !== "string" || !record.query.trim()) return;
+  var key = record.kind + "\u0000" + record.query;
+  var previous = englishHistList;
+  englishHistList = englishHistList.filter(function(item){ return item && (item.kind + "\u0000" + (item.query || "")) !== key; });
+  englishHistList.unshift(record);
+  if(englishHistList.length > 50) englishHistList.pop();
+  if(!saveEnglishHistory()) englishHistList = previous;
+  renderHistCount();
+}
+function currentHistoryList(){ return lookupLanguage === "en" ? englishHistList : histList; }
+function updateHistoryUI(){
+  var isEnglish = lookupLanguage === "en";
+  var label = isEnglish ? "英语记录" : "汉字记录";
+  var title = $("historyTitle"); if(title) title.textContent = label;
+  var clear = $("clearHistory"); if(clear){ clear.textContent = "清空" + label; clear.setAttribute("aria-label", "清空" + label); }
+  ["historyBtn","resHistBtn","detHistBtn"].forEach(function(id){
+    var button = $(id); if(!button) return;
+    button.setAttribute("aria-label", "查过的内容");
+    if(button.firstChild && button.firstChild.nodeType === 3) button.firstChild.nodeValue = "📖 查过的内容 ";
+  });
+  renderHistCount();
+}
+function renderHistCount(){
+  var count = currentHistoryList().filter(function(item){ return lookupLanguage !== "en" || englishHistoryRecord(item); }).length;
+  ["histCount","resHistCount","detHistCount"].forEach(function(id){ var node = $(id); if(node) node.textContent = count ? "（"+count+"）" : ""; });
+}
+function formatHistoryDate(value){
+  var date = new Date(value); if(isNaN(date.getTime())) return "";
+  var now = new Date();
+  var day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var recordDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var days = Math.round((day - recordDay) / 86400000);
+  if(days === 0) return "今天";
+  if(days === 1) return "昨天";
+  return date.toLocaleDateString("zh-CN");
+}
+function englishHistoryRecord(item){
+  return item && typeof item.query === "string" && !!item.query.trim() && (item.kind === "word" || item.kind === "sentence");
+}
+function decorateHistorySpeaker(button){
+  if(!button || typeof window === "undefined" || !window.LucideIcons) return;
+  button.textContent = "";
+  button.appendChild(window.LucideIcons.icon("volume-2"));
+}
 function renderHistory(){
   var box = $("historyList"); box.innerHTML = "";
-  if(!histList.length){ box.innerHTML = '<div class="h-empty">还没有查过字<br>按住大按钮查一个吧</div>'; return; }
-  histList.forEach(function(item){
-    var data = DICT[item.c]; var py = data ? (Array.isArray(data.p) ? data.p[0] : data.p) : "";
-    var words = data && data.w ? data.w.slice(0,2).join("、") : "";
+  var records = currentHistoryList().filter(function(item){ return lookupLanguage !== "en" || englishHistoryRecord(item); });
+  if(!records.length){ box.innerHTML = '<div class="h-empty">还没有查过的内容</div>'; return; }
+  records.forEach(function(item){
     var row = document.createElement("div"); row.className = "h-item";
-    row.innerHTML = '<div class="zi">'+esc(item.c)+'</div><div class="info"><b>'+esc(py)+' · '+esc(words)+'</b><span>'+new Date(item.t).toLocaleDateString()+" "+new Date(item.t).toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"})+'</span></div><button class="mini-spk" aria-label="读一读">🔊</button>';
-    row.onclick = function(){ current = item.c; detailFrom = "history"; addHistory(item.c); renderDetail(); };
-    row.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(item.c, this); };
+    if(lookupLanguage === "en"){
+      var speech = item.kind === "word" && typeof item.word === "string" && item.word ? item.word : item.query;
+      var phonetic = item.kind === "word" && typeof item.phonetic === "string" ? item.phonetic : "";
+      var summary = item.kind === "word" && Array.isArray(item.meanings) && item.meanings[0] && typeof item.meanings[0].translation === "string" ? item.meanings[0].translation : (item.translation || "");
+      row.classList.add("english-history");
+      row.innerHTML = '<div class="english-history-main"><div class="english-history-word">'+esc(item.kind === "word" ? (item.word || item.query) : item.query)+'</div>'+(phonetic ? '<div class="english-history-phonetic">'+esc(phonetic)+'</div>' : '')+(summary ? '<div class="english-history-summary">'+esc(summary)+'</div>' : '')+'<span class="english-history-date">'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="朗读 '+esc(speech)+'">🔊</button>';
+      row.onclick = function(){ historyScrollTop = box.scrollTop; openEnglishHistory(item); };
+      decorateHistorySpeaker(row.querySelector("button"));
+      row.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(speech, this, "en"); };
+    }else if(typeof item.w === "string" && item.w){
+      row.classList.add("history-word-item");
+      row.innerHTML = '<div class="info"><div class="history-word">'+esc(item.w)+'</div><span>'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="读一读">🔊</button>';
+      row.onclick = function(){ historyScrollTop = box.scrollTop; openChineseWordHistory(item); };
+      decorateHistorySpeaker(row.querySelector("button"));
+      row.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(item.w, this); };
+    }else{
+      var data = DICT[item.c]; var py = data ? (Array.isArray(data.p) ? data.p[0] : data.p) : "";
+      var words = data && data.w ? data.w.slice(0,2).join("、") : "";
+      row.innerHTML = '<div class="zi">'+esc(item.c)+'</div><div class="info"><b>'+esc(py+' · '+words)+'</b><span>'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="读一读">🔊</button>';
+      row.onclick = function(){ historyScrollTop = box.scrollTop; current = item.c; detailFrom = "history"; renderDetail(); };
+      decorateHistorySpeaker(row.querySelector("button"));
+      row.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(item.c, this); };
+    }
     box.appendChild(row);
   });
 }
-var histFrom = "home";
-function openHistory(){ cancelSpeech(); histFrom = $("detail").classList.contains("show") ? "detail" : ($("results").classList.contains("show") ? "results" : "home"); showWorkspace("history"); renderHistory(); }
+var histFrom = "home"; var historyScrollTop = 0; var historyClearLanguage = null; var historyReturn = null; var historyConfirmReturn = null;
+function restoreHistoryScroll(){ requestAnimationFrame(function(){ $("historyList").scrollTop = historyScrollTop; }); }
+function openChineseWordHistory(item){
+  if(!item || typeof item.w !== "string" || !item.w) return;
+  showResultsPage(Array.from(item.w), 0, true, true);
+}
+function openEnglishHistory(item){
+  if(!englishLookupController || !englishHistoryRecord(item)) return;
+  historyScrollTop = $("historyList").scrollTop;
+  showWorkspace("english");
+  englishLookupController.lookup(item.query, false, true, true);
+}
+function returnFromEnglishHistory(){
+  cancelSpeech();
+  showWorkspace("history");
+  renderHistory();
+  restoreHistoryScroll();
+}
+function openHistory(){
+  cancelSpeech();
+  if($("history").classList.contains("show")) return;
+  histFrom = $("detail").classList.contains("show") ? "detail" : ($("results").classList.contains("show") ? "results" : (lookupLanguage === "en" ? "english" : "home"));
+  var englishVisible = !!$("englishLookupRoot") && !$("englishLookupRoot").hidden;
+  historyReturn = {
+    current: current,
+    detailFrom: detailFrom === "history" ? "home" : detailFrom,
+    resultsFromHistory: resultsFromHistory,
+    resultsView: histFrom === "results" && resultsView ? {
+      kind: resultsView.kind,
+      chars: resultsView.chars ? resultsView.chars.slice() : null,
+      toneNum: resultsView.toneNum || 0,
+      fromHistory: !!resultsView.fromHistory,
+      preserveAll: !!resultsView.preserveAll,
+      text: resultsView.text || ""
+    } : null,
+    englishView: lookupLanguage === "en" && englishVisible && englishLookupController && englishLookupController.viewSnapshot ? englishLookupController.viewSnapshot() : null
+  };
+  if(lookupLanguage === "en" && englishLookupController && englishLookupController.cancelPending) englishLookupController.cancelPending();
+  showWorkspace("history");
+  renderHistory();
+}
 $("historyBtn").addEventListener("click", openHistory);
 $("resHistBtn").addEventListener("click", openHistory);
 $("histBack").addEventListener("click", function(){
   cancelSpeech();
   $("history").classList.remove("show");
   if(histFrom === "detail"){
-    $("detail").classList.add("show");
+    current = historyReturn && historyReturn.current ? historyReturn.current : current;
+    detailFrom = historyReturn && historyReturn.detailFrom ? historyReturn.detailFrom : "home";
+    resultsFromHistory = historyReturn ? historyReturn.resultsFromHistory : false;
+    renderDetail();
     requestAnimationFrame(function(){
       fitDetailChar();
       var box = $("strokes"); fitStrokeCells(box, box.querySelectorAll(".stroke-cell").length);
     });
   }
   else if(histFrom === "results"){
-    $("results").classList.add("show");
-    requestAnimationFrame(fitResultCards);
+    if(historyReturn && historyReturn.resultsView && historyReturn.resultsView.kind === "candidates" && historyReturn.resultsView.chars){
+      showResultsPage(historyReturn.resultsView.chars, historyReturn.resultsView.toneNum, historyReturn.resultsView.fromHistory, historyReturn.resultsView.preserveAll);
+    }else if(historyReturn && historyReturn.resultsView && historyReturn.resultsView.kind === "sentence"){
+      showSentenceMode(historyReturn.resultsView.text);
+    }else{
+      $("results").classList.add("show");
+      requestAnimationFrame(fitResultCards);
+    }
+  }
+  else if(histFrom === "english"){
+    showWorkspace("english");
+    if(historyReturn && englishLookupController && englishLookupController.restoreView) englishLookupController.restoreView(historyReturn.englishView);
   }
   else { showWorkspace(null); }
 });
-$("clearHistory").addEventListener("click", function(){ histList = []; saveHistory(); renderHistCount(); renderHistory(); });
+function closeHistoryConfirm(){
+  historyClearLanguage = null;
+  var dialog = $("historyConfirm"); if(dialog) dialog.hidden = true;
+  var trigger = historyConfirmReturn; historyConfirmReturn = null;
+  if(trigger && typeof trigger.focus === "function") trigger.focus();
+}
+function requestClearHistory(){
+  historyClearLanguage = lookupLanguage;
+  historyConfirmReturn = $("clearHistory");
+  $("historyConfirmText").textContent = "清空" + (lookupLanguage === "en" ? "英语记录" : "汉字记录") + "？";
+  $("historyConfirm").hidden = false;
+  $("historyCancel").focus();
+}
+function confirmClearHistory(){
+  var language = historyClearLanguage;
+  closeHistoryConfirm();
+  if(language === "en"){
+    var oldEnglish = englishHistList; englishHistList = [];
+    if(!saveEnglishHistory()) englishHistList = oldEnglish;
+  }else{
+    var oldChinese = histList; histList = [];
+    if(!saveHistory()) histList = oldChinese;
+  }
+  renderHistCount(); renderHistory();
+}
+$("clearHistory").addEventListener("click", requestClearHistory);
+$("historyCancel").addEventListener("click", closeHistoryConfirm);
+$("historyConfirmOk").addEventListener("click", confirmClearHistory);
+document.addEventListener("keydown", function(event){
+  if(historyClearLanguage === null) return;
+  if(event.key === "Escape"){
+    event.preventDefault(); closeHistoryConfirm(); return;
+  }
+  if(event.key !== "Tab") return;
+  var dialog = $("historyConfirm"); if(!dialog) return;
+  var buttons = dialog.querySelectorAll("button"); if(!buttons.length) return;
+  var first = buttons[0], last = buttons[buttons.length - 1];
+  if(event.shiftKey && document.activeElement === first){ event.preventDefault(); last.focus(); }
+  else if(!event.shiftKey && document.activeElement === last){ event.preventDefault(); first.focus(); }
+});
 var detailFrom = "home"; // 记录从哪个页面进入详情页
-$("backBtn").addEventListener("click", function(){ cancelSpeech(); cleanups.forEach(function(t){ clearInterval(t.interval); }); cleanups=[]; showWorkspace(detailFrom === "results" ? "results" : detailFrom === "history" ? "history" : null); if(detailFrom === "results"){ requestAnimationFrame(fitResultCards); } else if(detailFrom === "history"){ renderHistory(); } });
+$("backBtn").addEventListener("click", function(){ cancelSpeech(); cleanups.forEach(function(t){ clearInterval(t.interval); }); cleanups=[]; showWorkspace(detailFrom === "results" ? "results" : detailFrom === "history" ? "history" : null); if(detailFrom === "results"){ requestAnimationFrame(fitResultCards); } else if(detailFrom === "history"){ renderHistory(); restoreHistoryScroll(); } });
 $("detHistBtn").addEventListener("click", openHistory);
 var rec = { active:false, timer:null, startTime:0, cancelled:false, startY:0, animTimer:null, autoTimer:null, btn:null, tipTimer:null, autoMode:false, captureSeq:0 };
 // 识别等待提示语：让孩子知道"它在认真工作"，轮播缓解等待无聊
@@ -1035,7 +1226,7 @@ function submitRecording(samples, seq, lang){
     if(seq !== rec.captureSeq) return;
     setRecState("off");
     if(text){
-      if(lang === "en" && englishLookupController){ englishLookupController.handleRecognition(text); }
+      if(lang === "en" && englishLookupController){ showWorkspace("english"); englishLookupController.handleRecognition(text); }
       else if(lang === "zh") handleVoiceResult(text);
     } else toast("没听清，再按一次试试");
   }).catch(function(err){
@@ -1216,6 +1407,8 @@ function shouldUseSelectMode(text){
 // 语音整句模式：识别结果原样输出（保留重复与顺序），渲染成主区域大卡片，点任意字查详情
 function showSentenceMode(text){
   cancelSpeech();
+  resultsFromHistory = false;
+  resultsView = {kind:"sentence", text:text, fromHistory:false};
   $("rTitle").textContent = "📖 你说的是：";
   var src = window.__asrProvider ? "（" + window.__asrProvider + "识别）" : "";
   $("rSub").textContent = "点句子里的字，看笔顺和部首 " + src;
@@ -1319,7 +1512,7 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
   $("rSub").textContent = toneNum ? "点一下就能看笔顺和部首（第"+toneNum+"声）" : "点一下就能看笔顺和部首";
   showResultsPage(list, toneNum);
 }
-renderHistCount();
+updateHistoryUI();
 document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
 
 // 探测现有语音服务并明确提示连接状态。
@@ -1364,16 +1557,20 @@ if("serviceWorker" in navigator && (location.protocol === "https:" || ["127.0.0.
   }).catch(function(){});
 }
 function setLookupLanguage(lang){
+  var history = $("history");
+  var keepHistory = !!history && history.classList.contains("show");
   lookupLanguage = lang === "en" ? "en" : "zh";
   cancelSpeech();
+  if(typeof closeHistoryConfirm === "function") closeHistoryConfirm();
   if(rec){
     if(rec.active || rec.autoMode) cancelAutoRec();
     else { rec.captureSeq++; setRecState("off"); }
   }
-  showWorkspace(lookupLanguage === "en" ? "english" : null);
+  resultsFromHistory = false;
+  showWorkspace(keepHistory ? "history" : (lookupLanguage === "en" ? "english" : null));
+  if(typeof updateHistoryUI === "function") updateHistoryUI();
+  if(keepHistory && typeof renderHistory === "function") renderHistory();
   var recBtn = $("recBtn");
-  var historyBtn = $("historyBtn");
-  if(historyBtn) historyBtn.hidden = lookupLanguage === "en";
   if(recBtn){
     recBtn.setAttribute("aria-label", lookupLanguage === "en" ? "按住说英语" : "按住说话查字");
     var hint = recBtn.querySelector(".hint"); if(hint) hint.textContent = lookupLanguage === "en" ? "按住说英语" : "按住说字";
@@ -1390,13 +1587,15 @@ window.addEventListener("english-lookup-ready", function(event){
     cancelSpeech: function(){ cancelSpeech(); },
     icon: function(name){ return window.LucideIcons ? window.LucideIcons.icon(name) : null; },
     isEnglish: function(){ return lookupLanguage === "en"; },
-    onLanguageChange: setLookupLanguage
+    onLanguageChange: setLookupLanguage,
+    onHistorySave: saveEnglishRecord,
+    onHistoryBack: returnFromEnglishHistory
   });
   englishLookupController.setLanguage("zh");
 });
 </script>
-<link rel="stylesheet" href="english-lookup.css?v=voice3">
-<script src="lucide-icons.js?v=voice3"></script>
-<script src="english-lookup.js?v=voice3"></script>
+<link rel="stylesheet" href="english-lookup.css?v=history1">
+<script src="lucide-icons.js?v=history1"></script>
+<script src="english-lookup.js?v=history1"></script>
 </body>
 </html>
