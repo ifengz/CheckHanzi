@@ -32,6 +32,10 @@ gen t07_mama       "妈妈"
 gen t08_shiqing    "事情"
 gen t09_zenme      "我想查这个字怎么写"
 gen t10_shifou     "是不是"
+gen t12_shishi     "认识"
+gen t13_gongshi    "公式"
+gen t14_yiyi       "一四得四"
+gen t15_mama2      "妈妈在厨房做饭"
 # 小音量版（模拟孩子小声说话）：降到 15%
 ffmpeg -y -loglevel error -i t03_chang.wav -af volume=0.15 t11_quiet.wav
 echo "  生成 t11_quiet.wav: 天空飘过一朵白云（音量15%）"
@@ -55,6 +59,8 @@ expected = {
   "t06_shige": "十个手指", "t07_mama": "妈妈", "t08_shiqing": "事情",
   "t09_zenme": "我想查这个字怎么写", "t10_shifou": "是不是",
   "t11_quiet": "天空飘过一朵白云",
+  "t12_shishi": "认识", "t13_gongshi": "公式", "t14_yiyi": "一四得四",
+  "t15_mama2": "妈妈在厨房做饭",
 }
 import json
 ok = fail = 0

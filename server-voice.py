@@ -73,6 +73,10 @@ def digits_to_cn(text: str) -> str:
         return text
     def repl(m):
         s = m.group(0)
+        # 乘法口诀（"14得4"→一四得四）：数字后紧跟"得"按逐位读，不走整数值读法
+        after = text[m.end():m.end() + 1]
+        if after == "得":
+            return "".join(_CN_DIGITS[int(c)] for c in s)
         if len(s) > 3 or (len(s) > 1 and s[0] == "0"):
             return "".join(_CN_DIGITS[int(c)] for c in s)
         cn = _num_to_cn(int(s))
