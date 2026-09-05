@@ -181,7 +181,13 @@ def xfyun_asr(wav_bytes: bytes):
             ws.close()
         except Exception:
             pass
-    text = postprocess("".join(text_parts))
+    # 讯飞按词返回 token：汉字紧拼，英文单词之间补空格（否则 "Hello everyone" 拼成 "Helloeveryone"）
+    joined = ""
+    for w in text_parts:
+        if joined and w and joined[-1].isascii() and joined[-1].isalpha() and w[0].isascii() and w[0].isalpha():
+            joined += " "
+        joined += w
+    text = postprocess(joined)
     return text, len(samples) / 16000
 
 # ── SenseVoice-small（主引擎，sherpa-onnx）─────────────────────
@@ -370,7 +376,10 @@ if __name__ == "__main__":
     threading.Thread(
         target=lambda: (
             print("预热识别模型…", flush=True),
+            # SenseVoice 先就绪（中文主路径）；whisper 也后台预热——
+            # 否则讯飞空结果转英文兜底时冷加载要 5-7 秒（日志实测），孩子端就是"没响应"
             get_sensevoice() if ASR_ENGINE == "sensevoice" else get_whisper(),
+            get_whisper(),
             print("模型就绪 ✓", flush=True),
         ),
         daemon=True,
