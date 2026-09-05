@@ -25,3 +25,7 @@ char-dict.template.html
 /doc/core/findings.md
 /doc/test/
 __pycache__/
+
+# Generated English runtime data and local response caches
+/data/english/*.sqlite3
+/english-cache.sqlite3*

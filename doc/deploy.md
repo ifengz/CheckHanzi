@@ -11,11 +11,15 @@ Before pushing main:
 - Check complex characters and all result candidates at iPad landscape, reduced landscape height, portrait, and phone widths. No glyph clipping, overlapping sections, or inaccessible controls.
 - Confirm dictionary source versions, licenses, generated data integrity, and unchanged existing entries.
 - Review `git diff`, run `git diff --check`, and stage only the scoped release files. Process records and local test evidence remain ignored.
-- Keep voice providers, credentials, server configuration, and unrelated files unchanged.
+- Keep voice credentials, unrelated server configuration, and unrelated files unchanged. English lookup uses the approved pinned ECDICT dataset and MyMemory translation API; English speech uses the existing recognizer and Edge TTS provider.
+- Run `.github/scripts/check-english.py` after decompressing the packaged dictionary; verify its source and asset manifest. Run `tests/check_voice_backend.py`, including its real Edge TTS case. Required Python packages include Flask, flask-cors, numpy, edge-tts and imageio-ffmpeg==0.6.0.
+- Verify typed and spoken English words and complete sentences, I/a/apostrophe preservation, sentence-word return, editable queries, network/quota errors, and language changes during pending work.
+- Check measured normalized audio and language/version cache isolation. Stage and verify backend/data before serving the new frontend; never expose server-only English data or cache files through static rsync.
 
 After pushing:
 
 - Wait for the deployment workflow for the exact pushed commit to succeed.
 - Compare the deployed HTML and dictionary asset hashes with the committed files.
 - Verify `/api/ping`, a real audio response, newly supported characters, and complex-character layout at the production page.
+- Verify `/api/english` real word and sentence responses, multipart English ASR, and `X-TTS-Version: 2`; inspect actual English iPad landscape and phone screenshots.
 - Distinguish emulated viewport checks from a physical iPad/Safari/child-voice check in the closeout.

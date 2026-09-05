@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Preview local UI using the real deployed voice API; no mock audio or ASR."""
+"""Preview local UI against an explicit real API origin; no mock responses."""
 
+import argparse
 import http.server
 import pathlib
-import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-VOICE_ORIGIN = "https://hanzi.usfan.net"
+API_ORIGIN = "https://hanzi.usfan.net"
 
 
 class PreviewHandler(http.server.SimpleHTTPRequestHandler):
@@ -25,7 +26,7 @@ class PreviewHandler(http.server.SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         data = self.rfile.read(length) if length else None
         request = urllib.request.Request(
-            VOICE_ORIGIN + self.path,
+            API_ORIGIN + self.path,
             data=data,
             method=self.command,
             headers={"Content-Type": self.headers.get("Content-Type", "application/octet-stream")},
@@ -35,7 +36,7 @@ class PreviewHandler(http.server.SimpleHTTPRequestHandler):
         except urllib.error.HTTPError as error:
             response = error
         except urllib.error.URLError:
-            self.send_error(502, "Deployed voice API unavailable")
+            self.send_error(502, "Configured API unavailable")
             return
         with response:
             body = response.read()
@@ -60,6 +61,14 @@ class PreviewHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("port", nargs="?", type=int, default=8765)
+    parser.add_argument("--api-origin", default=API_ORIGIN)
+    args = parser.parse_args()
+    origin = urllib.parse.urlsplit(args.api_origin)
+    if origin.scheme not in {"http", "https"} or not origin.netloc or origin.path not in {"", "/"} or origin.query or origin.fragment or origin.username:
+        parser.error("--api-origin must be an HTTP(S) origin without credentials or a path")
+    API_ORIGIN = args.api_origin.rstrip("/")
+    port = args.port
     print(f"Preview: http://127.0.0.1:{port}/char-dict.html", flush=True)
     http.server.ThreadingHTTPServer(("127.0.0.1", port), PreviewHandler).serve_forever()

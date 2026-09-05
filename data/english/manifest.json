@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "dictionary": {
+    "file": "ecdict.sqlite3",
+    "bytes": 77484032,
+    "sha256": "4e5887e919c65507fe7a3d32e765e9710df970249b21ef05a88b01d9ef304180",
+    "row_count": 770611
+  },
+  "archive": {
+    "file": "ecdict.sqlite3.gz",
+    "bytes": 33507260,
+    "sha256": "ffe307e1a689c3bdc60c501102f7c2222a22cc169e5dda62b438081718855519",
+    "gzip_mtime": 0
+  },
+  "source": {
+    "name": "ECDICT",
+    "repository": "https://github.com/skywind3000/ECDICT",
+    "download_url": "https://raw.githubusercontent.com/skywind3000/ECDICT/bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b/ecdict.csv",
+    "commit": "bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b",
+    "git_blob": "c4ade63ea08cf39d9c3475e96929036d64d94c94",
+    "csv_bytes": 65933428,
+    "csv_sha256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf"
+  },
+  "license": {
+    "file": "ECDICT-LICENSE.txt",
+    "sha256": "f8552dd246f61a4e064569eae6194a01c6b3d63b03bf27c6ca863593c549ed0f"
+  }
+}

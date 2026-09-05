@@ -1,9 +1,9 @@
 /* 查字宝 Service Worker：朗读音频离线缓存
  * - /api/tts?text=X：缓存优先（命中零网络），未命中回源并写入缓存
  * - /char-dict.html：网络优先（保证更新可达），断网回退缓存
- * 版本号 v1：字典/策略变更时 bump，旧缓存整体废弃
+ * 版本号 v2：统一响度和中英文声音，旧音频缓存废弃
  */
-var CACHE = "chazi-tts-v1";
+var CACHE = "chazi-tts-v2";
 
 self.addEventListener("install", function(e){ self.skipWaiting(); });
 self.addEventListener("activate", function(e){

@@ -18,10 +18,12 @@
 引擎开关：环境变量 ASR_ENGINE = sensevoice(默认) | whisper（只影响本地引擎选择）
 """
 
-import os, io, re, wave, hashlib, asyncio, threading, time
+import os, io, re, wave, asyncio, threading, time, tempfile
 import numpy as np
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
+import voice_audio
+from english_lookup import create_english_blueprint, TranslationCache
 
 app = Flask(__name__)
 CORS(app)
@@ -37,6 +39,10 @@ except OSError:
     TTS_CACHE_DIR = os.path.join(_tf.gettempdir(), "chazi-tts-cache")
     os.makedirs(TTS_CACHE_DIR, exist_ok=True)
     print(f"[tts] 缓存目录降级到 {TTS_CACHE_DIR}", flush=True)
+
+app.register_blueprint(create_english_blueprint(cache=TranslationCache(
+    os.environ.get("ENGLISH_TRANSLATION_CACHE_PATH", os.path.join(TTS_CACHE_DIR, "english.sqlite3"))
+)))
 
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")   # 回退引擎模型
 ASR_ENGINE = os.environ.get("ASR_ENGINE", "sensevoice").lower()  # sensevoice | whisper
@@ -100,6 +106,11 @@ def postprocess(text: str) -> str:
     text = re.sub(r"\s{2,}", " ", text).strip()               # 多余空格归一
     text = to_simplified(text)
     return digits_to_cn(text).strip()
+
+def postprocess_en(text: str) -> str:
+    """Remove recognizer tags while preserving English lookup text verbatim."""
+    text = re.sub(r"<\|[^|]*\|>", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 def wav_bytes_to_samples(wav_bytes: bytes):
     """前端上传的 WAV → (float32 samples, 采样率)"""
@@ -280,7 +291,7 @@ def get_sensevoice_en():
                     print("[asr] SenseVoice-small(en) 就绪 ✓", flush=True)
     return _sv_en_recognizer
 
-def _sv_decode(rec, wav_bytes):
+def _sv_decode(rec, wav_bytes, lang: str):
     samples, sr = wav_bytes_to_samples(wav_bytes)
     if samples.size < sr // 10:  # <0.1s 视为无效
         return "", len(samples) / sr
@@ -289,14 +300,15 @@ def _sv_decode(rec, wav_bytes):
         stream.accept_waveform(sr, samples)
         rec.decode_stream(stream)
         text = stream.result.text
-    return postprocess(text), len(samples) / sr
+    process = postprocess_en if lang == "en" else postprocess
+    return process(text), len(samples) / sr
 
 def sensevoice_asr(wav_bytes: bytes, lang: str = "zh"):
     """SenseVoice 识别，返回 (文本, 时长秒)；引擎不可用时返回 (None, 0.0)。lang='en' 走英文实例"""
     rec = get_sensevoice_en() if lang == "en" else get_sensevoice()
     if rec is None:
         return None, 0.0
-    return _sv_decode(rec, wav_bytes)
+    return _sv_decode(rec, wav_bytes, lang)
 
 # ── faster-whisper（回退引擎）──────────────────────────────────
 def get_whisper():
@@ -325,10 +337,11 @@ def whisper_asr(wav_bytes: bytes, lang: str = "zh"):
         vad_filter=True,
         beam_size=1 if lang == "zh" else 5,
         condition_on_previous_text=False,
-        initial_prompt=None if lang is None else "以下是普通话的词语。",
+        initial_prompt="以下是普通话的词语。" if lang == "zh" else None,
     )
     text = "".join(s.text for s in segments).strip()
-    return postprocess(text), getattr(_info, "duration", 0.0)
+    process = postprocess_en if lang != "zh" else postprocess
+    return process(text), getattr(_info, "duration", 0.0)
 
 def _englishish(text: str) -> bool:
     """无汉字且 ≥2 个英文字母 → 英文为主（讯飞 zh_cn 对英文常拼错/粘连，值得让 whisper 重认）"""
@@ -336,8 +349,19 @@ def _englishish(text: str) -> bool:
     letters = sum(1 for c in text if c.isascii() and c.isalpha())
     return cjk == 0 and letters >= 2
 
-def recognize(wav_bytes: bytes):
+def recognize_english(wav_bytes: bytes):
+    """Explicit English requests never pass through a Chinese recognizer first."""
+    wav_bytes = normalize_wav(wav_bytes)
+    recognize_audio = {"sensevoice": sensevoice_asr, "whisper": whisper_asr}[ASR_ENGINE]
+    text, dur = recognize_audio(wav_bytes, lang="en")
+    if text is None:
+        raise RuntimeError("英文识别模型未就绪")
+    return text, ASR_ENGINE + "-en", dur
+
+def recognize(wav_bytes: bytes, lang: str = "zh"):
     """统一入口：归一化音量 → 讯飞(已配置时) → SenseVoice → whisper，逐级自动回退。返回 (文本, 引擎名, 时长)"""
+    if lang == "en":
+        return recognize_english(wav_bytes)
     wav_bytes = normalize_wav(wav_bytes)   # 儿童小音量先抬到引擎舒适区（一次归一，全链受益）
     if XFYUN_ENABLED:
         try:
@@ -400,6 +424,10 @@ def asr_handler():
         audio_data = raw
     if not audio_data or len(audio_data) < 1024:
         return jsonify({"error": "音频数据过短"}), 400
+    try:
+        lang = voice_audio.parse_language(request.form.get("lang", request.args.get("lang", "zh")))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     # 音频留存（诊断用）：最近 10 条，覆盖式，排查"识别不准"时把真实上传音频拉下来分析
     try:
         import glob as _glob
@@ -415,17 +443,17 @@ def asr_handler():
         pass
     try:
         t0 = time.time()
-        text, engine, dur = recognize(audio_data)
-        print(f"[asr] {engine} {time.time()-t0:.2f}s (音频 {dur:.1f}s) -> {text!r}", flush=True)
+        text, engine, dur = recognize(audio_data, lang)
+        print(f"[asr] {lang}/{engine} {time.time()-t0:.2f}s (音频 {dur:.1f}s) -> {text!r}", flush=True)
         provider = {"xfyun": "讯飞"}.get(engine, "本地")
-        return jsonify({"text": text, "provider": provider})
+        return jsonify({"text": text, "provider": provider, "engine": engine, "lang": lang})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # ── edge-tts 朗读 ────────────────────────────────────────────────
-async def edge_tts_generate(text: str) -> bytes:
+async def edge_tts_generate(text: str, lang: str) -> bytes:
     import edge_tts
-    communicate = edge_tts.Communicate(text, "zh-CN-XiaoxiaoNeural")
+    communicate = edge_tts.Communicate(text, voice_audio.voice_for_language(lang))
     chunks = []
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
@@ -437,30 +465,46 @@ def tts_handler():
     text = request.args.get("text", "").strip()
     if not text:
         return jsonify({"error": "缺少 text 参数"}), 400
-    if len(text) > 200:
-        return jsonify({"error": "文本过长"}), 400
-    # 命中磁盘缓存直接返回（毫秒级）
-    key = hashlib.md5(text.encode("utf-8")).hexdigest()
+    if len(text) > 300:
+        return jsonify({"error": "朗读内容最多 300 个字符"}), 400
+    try:
+        lang = voice_audio.parse_language(request.args.get("lang", "zh"))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    voice = voice_audio.voice_for_language(lang)
+    key = voice_audio.tts_cache_key(text, lang, voice)
     cache_path = os.path.join(TTS_CACHE_DIR, key + ".mp3")
     if os.path.exists(cache_path) and os.path.getsize(cache_path) > 500:
         try:
             with open(cache_path, "rb") as f:
-                # 长缓存：同一个字内容不变，iPad 浏览器本地缓存后第二次点击零请求
-                return Response(f.read(), mimetype="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+                return Response(f.read(), mimetype="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable", "X-TTS-Version": voice_audio.TTS_VERSION})
         except Exception:
             pass
     try:
-        mp3_data = asyncio.run(edge_tts_generate(text))
-        if not mp3_data:
+        source_mp3 = asyncio.run(asyncio.wait_for(edge_tts_generate(text, lang), timeout=12))
+        if not source_mp3:
             return jsonify({"error": "生成失败"}), 500
+        mp3_data = voice_audio.normalize_mp3_bytes(source_mp3)
+    except voice_audio.VoiceAudioError as error:
+        print(f"[tts] {error}", flush=True)
+        return jsonify({"error": "朗读音频处理失败"}), 502
+    except Exception as error:
+        print(f"[tts] 生成失败: {error}", flush=True)
+        return jsonify({"error": "朗读生成失败"}), 502
+    try:
+        fd, pending_path = tempfile.mkstemp(prefix=key + ".", suffix=".tmp", dir=TTS_CACHE_DIR)
         try:
-            with open(cache_path, "wb") as f:
+            with os.fdopen(fd, "wb") as f:
                 f.write(mp3_data)
+            os.replace(pending_path, cache_path)
         except Exception:
-            pass
-        return Response(mp3_data, mimetype="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+            try: os.unlink(pending_path)
+            except OSError: pass
+            raise
+    except OSError as error:
+        print(f"[tts] 缓存写入失败: {error}", flush=True)
+        return jsonify({"error": "朗读缓存写入失败"}), 502
+    return Response(mp3_data, mimetype="audio/mpeg", headers={"Cache-Control": "public, max-age=31536000, immutable", "X-TTS-Version": voice_audio.TTS_VERSION})
 
 @app.route("/api/ping", methods=["GET"])
 def ping():

@@ -19,24 +19,14 @@ jobs:
           node .github/scripts/check-client.mjs
           node .github/scripts/check-dictionary.mjs
 
-      - name: rsync 同步到服务器
-        uses: burnett01/rsync-deployments@7.0.2
-        with:
-          # -a 归档, -v 详细, -z 压缩, --delete 删除服务器上多余的代码文件
-          # --exclude 排除：
-          #   大模型文件（不在 git 仓库，服务器手动放入，不能删）
-          #   宝塔系统文件（.user.ini 无权限删、.well-known SSL 验证、.htaccess 站点配置）
-          switches: -avz --delete --exclude='models/tts/model.onnx' --exclude='models/tts-backup-aishell3/' --exclude='.git/' --exclude='dev-server.py' --exclude='server-voice.py' --exclude='dev-server.crt' --exclude='dev-server.key' --exclude='char-dict.template.html' --exclude='.user.ini' --exclude='.well-known/' --exclude='.htaccess' --exclude='index.html' --exclude='404.html' --exclude='.github/'
-          path: ./
-          remote_path: ${{ secrets.DEPLOY_PATH }}
-          remote_host: ${{ secrets.DEPLOY_HOST }}
-          remote_user: ${{ secrets.DEPLOY_USER }}
-          remote_key: ${{ secrets.DEPLOY_SSH_KEY }}
-          remote_port: ${{ secrets.DEPLOY_PORT }}
+      - name: 检查英文和语音服务
+        run: |
+          python -m pip install flask flask-cors numpy edge-tts imageio-ffmpeg==0.6.0
+          gzip -dk data/english/ecdict.sqlite3.gz
+          python .github/scripts/check-english.py
+          python tests/check_voice_backend.py
 
-      # ── 语音服务自动部署：上传 server-voice.py → 依赖/模型自检 → 自动探测重启 → 健康检查 ──
-      # 失败（依赖装不上/模型下载失败/健康检查不过）会在这里报红，前端站点不受影响
-      - name: 部署语音服务并重启
+      - name: 部署后端并验证
         env:
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
           SSH_USER: ${{ secrets.DEPLOY_USER }}
@@ -47,6 +37,21 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/voice_deploy_key
           chmod 600 ~/.ssh/voice_deploy_key
           SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
-          $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /opt/chazi-voice"
-          cat server-voice.py | $SSH "$SSH_USER@$SSH_HOST" "cat > /opt/chazi-voice/server-voice.py"
+          $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /opt/chazi-voice/incoming"
+          tar -cf - server-voice.py voice_audio.py english_lookup.py data/english/ecdict.sqlite3.gz data/english/ECDICT-LICENSE.txt data/english/manifest.json .github/scripts/check-english.py | $SSH "$SSH_USER@$SSH_HOST" "tar -xf - -C /opt/chazi-voice/incoming"
           $SSH "$SSH_USER@$SSH_HOST" "bash -s" < .github/scripts/deploy-voice.sh
+
+      - name: rsync 同步到服务器
+        uses: burnett01/rsync-deployments@7.0.2
+        with:
+          # -a 归档, -v 详细, -z 压缩, --delete 删除服务器上多余的代码文件
+          # --exclude 排除：
+          #   大模型文件（不在 git 仓库，服务器手动放入，不能删）
+          #   宝塔系统文件（.user.ini 无权限删、.well-known SSL 验证、.htaccess 站点配置）
+          switches: -avz --delete --exclude='models/tts/model.onnx' --exclude='models/tts-backup-aishell3/' --exclude='.git/' --exclude='dev-server.py' --exclude='server-voice.py' --exclude='voice_audio.py' --exclude='english_lookup.py' --exclude='english-cache.sqlite3*' --exclude='data/english/' --exclude='tests/' --exclude='__pycache__/' --exclude='dev-server.crt' --exclude='dev-server.key' --exclude='char-dict.template.html' --exclude='.user.ini' --exclude='.well-known/' --exclude='.htaccess' --exclude='index.html' --exclude='404.html' --exclude='.github/'
+          path: ./
+          remote_path: ${{ secrets.DEPLOY_PATH }}
+          remote_host: ${{ secrets.DEPLOY_HOST }}
+          remote_user: ${{ secrets.DEPLOY_USER }}
+          remote_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          remote_port: ${{ secrets.DEPLOY_PORT }}

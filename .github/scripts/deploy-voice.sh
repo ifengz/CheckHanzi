@@ -5,6 +5,7 @@
 # 重启：systemd restart；失败在杀进程前中止，绝不带崩线上
 set -u
 APP_DIR=/opt/chazi-voice
+RELEASE_DIR="$APP_DIR/incoming"
 SV_DIR="$APP_DIR/sensevoice"
 PORT=5001
 
@@ -31,7 +32,7 @@ if command -v systemctl >/dev/null 2>&1; then
   [ -n "$UNIT" ] && log "  托管方式: systemd($UNIT)"
 fi
 if [ -n "$UNIT" ]; then
-  systemctl cat "$UNIT" 2>/dev/null | grep -E "ExecStart|Environment|WorkingDirectory" | sed "s/^/  [unit] /" || true
+  systemctl cat "$UNIT" 2>/dev/null | grep -E "^ExecStart=|^WorkingDirectory=" | sed "s/^/  [unit] /" || true
 fi
 
 # ---- 1) 选定依赖安装目标解释器 ----
@@ -80,6 +81,12 @@ if "$PY" -c "import websocket" 2>/dev/null && ! "$PY" -c "from websocket import 
 fi
 "$PY" -c "from websocket import create_connection" 2>/dev/null || fail "websocket-client 校验失败（$PY）"
 "$PY" -c "import sherpa_onnx, flask, opencc, numpy" 2>/dev/null || fail "依赖校验不过（$PY）"
+
+# The bundled, pinned FFmpeg build provides loudnorm without a system package change.
+if ! "$PY" -c "import importlib.metadata; assert importlib.metadata.version('imageio-ffmpeg') == '0.6.0'" 2>/dev/null; then
+  "$PY" -m pip install 'imageio-ffmpeg==0.6.0' || fail "FFmpeg 依赖安装失败"
+fi
+"$PY" -c "import os, subprocess, imageio_ffmpeg; binary = os.environ.get('FFMPEG_BIN') or imageio_ffmpeg.get_ffmpeg_exe(); result = subprocess.run([binary, '-hide_banner', '-filters'], capture_output=True, text=True, check=True, timeout=10); assert 'loudnorm' in result.stdout" || fail "FFmpeg loudnorm 校验失败"
 log "依赖就绪 ✓"
 
 # 若切换到了专用 venv 且是 systemd 托管：改 unit 的 ExecStart 指向 venv python（保留 Environment 等）
@@ -111,6 +118,19 @@ else
   log "模型已存在，跳过下载"
 fi
 
+# Validate staged data and routes before replacing the running release.
+gzip -dc "$RELEASE_DIR/data/english/ecdict.sqlite3.gz" > "$RELEASE_DIR/data/english/ecdict.sqlite3.tmp" || fail "英文词库解压失败"
+mv "$RELEASE_DIR/data/english/ecdict.sqlite3.tmp" "$RELEASE_DIR/data/english/ecdict.sqlite3" || fail "英文词库准备失败"
+"$PY" "$RELEASE_DIR/.github/scripts/check-english.py" || fail "英文词库和接口校验失败"
+"$PY" -m py_compile "$RELEASE_DIR/server-voice.py" "$RELEASE_DIR/voice_audio.py" "$RELEASE_DIR/english_lookup.py" || fail "后端语法检查失败"
+mkdir -p "$APP_DIR/data/english" || fail "英文数据目录创建失败"
+for name in ecdict.sqlite3 ECDICT-LICENSE.txt manifest.json; do
+  mv "$RELEASE_DIR/data/english/$name" "$APP_DIR/data/english/$name" || fail "英文词库安装失败: $name"
+done
+for name in voice_audio.py english_lookup.py server-voice.py; do
+  mv "$RELEASE_DIR/$name" "$APP_DIR/$name" || fail "后端安装失败: $name"
+done
+
 # ---- 3) 重启 ----
 if [ -n "$UNIT" ]; then
   log "systemd 重启: $UNIT"
@@ -133,7 +153,9 @@ fi
 for i in $(seq 1 20); do
   sleep 2
   RESP=$(curl -s --max-time 3 "http://127.0.0.1:$PORT/api/ping" 2>/dev/null || true)
-  if echo "$RESP" | grep -q '"ok"'; then
+  if printf '%s' "$RESP" | "$PY" -c 'import json,sys; assert json.load(sys.stdin).get("ok") is True' 2>/dev/null; then
+    ENGLISH=$(curl -s --max-time 5 -H 'Content-Type: application/json' --data '{"text":"apple"}' "http://127.0.0.1:$PORT/api/english" || true)
+    printf '%s' "$ENGLISH" | "$PY" -c 'import json,sys; result=json.load(sys.stdin); assert result.get("kind") == "word" and result.get("word") == "apple" and result.get("meanings")' || fail "英文单词线上查询验证失败"
     log "健康检查通过: $RESP"
     log "当前进程: $(pgrep -af server-voice.py || echo 未找到)"
     log "部署完成 OK"

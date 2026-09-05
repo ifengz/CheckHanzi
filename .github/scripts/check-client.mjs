@@ -10,6 +10,7 @@ const html = process.argv.includes('--baseline')
   : readFileSync(resolve(root, 'char-dict.html'), 'utf8');
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 for (const script of scripts) new vm.Script(script);
+for (const name of ['english-lookup.js', 'lucide-icons.js']) new vm.Script(readFileSync(resolve(root, name), 'utf8'), { filename:name });
 
 const start = html.indexOf('function resample(');
 const end = html.indexOf('function floatToWav(', start);
@@ -41,9 +42,9 @@ const asrRequests = [];
 class TestXHR {
   constructor() { this.status = 0; this.responseText = ''; asrRequests.push(this); }
   open() {}
-  send() {}
+  send(form) { this.form = form; }
 }
-class TestFormData { append() {} }
+class TestFormData { constructor() { this.fields = {}; } append(key, value) { this.fields[key] = value; } }
 const asrContext = vm.createContext({
   Float32Array,
   XMLHttpRequest: TestXHR,
@@ -54,12 +55,20 @@ const asrContext = vm.createContext({
   window: {},
 });
 vm.runInContext(html.slice(asrStart, asrEnd), asrContext);
-const runAsr = () => {
+const runAsr = (lang = 'zh') => {
   asrRequests.length = 0;
-  const promise = asrContext.cloudRecognize(new Float32Array(1600));
+  const promise = asrContext.cloudRecognize(new Float32Array(1600), lang);
   assert.equal(asrRequests.length, 1, 'ASR must send one request');
+  assert.equal(asrRequests[0].form.fields.lang, lang, 'recording language must reach the server');
   return { promise, request: asrRequests[0] };
 };
+{
+  const { promise, request } = runAsr('en');
+  request.status = 200;
+  request.responseText = JSON.stringify({ text: "I have a friend's book.", provider: '本地' });
+  request.onload();
+  assert.equal(await promise, "I have a friend's book.", 'English ASR must preserve short words and punctuation');
+}
 {
   const { promise, request } = runAsr();
   request.status = 200;
@@ -138,4 +147,20 @@ bindContext.bindRecButton({
   addEventListener: (name, handler) => { listeners[name] = handler; },
 });
 listeners.pointercancel({ preventDefault() {} });
+
+const languageStart = html.indexOf('function setLookupLanguage(');
+const languageEnd = html.indexOf('window.addEventListener("english-lookup-ready"', languageStart);
+const languageHome = {
+  style: { display:'flex', removeProperty(name) { delete this[name]; } },
+  classList: { toggle() {} },
+};
+const languageContext = vm.createContext({
+  rec: { captureSeq:9, active:false, autoMode:false },
+  cancelSpeech() {}, cancelAutoRec() {}, setRecState() {},
+  $: name => name === 'home' ? languageHome : null,
+});
+vm.runInContext(html.slice(languageStart, languageEnd), languageContext);
+languageContext.setLookupLanguage('en');
+assert.equal(languageHome.style.display, undefined, 'Chinese back-navigation must not override English landscape grid');
+assert.equal(languageContext.rec.captureSeq, 10, 'Changing language must invalidate an ASR request even after recording stopped');
 console.log('Client syntax, audio resampling, and umlaut pinyin checks passed');

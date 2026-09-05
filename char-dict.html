@@ -217,6 +217,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 
 <div id="home">
   <div class="home-brand"><span class="logo">字</span><span>查字宝</span></div>
+  <div id="languageMode" class="language-mode" role="tablist" aria-label="查询语言">
+    <button type="button" role="tab" data-language="zh" aria-selected="true">汉字</button>
+    <button type="button" role="tab" data-language="en" aria-selected="false">English</button>
+  </div>
   <button id="recBtn" aria-label="按住说话查字"><span class="mic">🎙️</span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-dots"><i></i><i></i><i></i></span><span class="rec-txt">松开 查字</span></span></button>
   <p class="voice-sub">想查哪个字？按住说给它听</p>
   <div class="alt-zone">
@@ -227,6 +231,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
     </div>
     <button id="historyBtn">📖 查过的字 <span class="n" id="histCount"></span></button>
   </div>
+  <div id="englishLookupRoot" hidden></div>
   <div id="warnBanner">⚠️ 语音功能未就绪，请用输入框查字。本地开发需用 dev-server.py 启动。</div>
   <div id="debugBtn" title="语音调试台">⚙</div>
 </div>
@@ -309,6 +314,7 @@ var characterStrokeChars = "";
 })(typeof CHARACTER_DATA === "object" ? CHARACTER_DATA : null);
 
 var mode = "cn"; var current = null; var currentHomophones = []; var histList = [];
+var lookupLanguage = "zh"; var englishLookupController = null;
 try{ histList = JSON.parse(localStorage.getItem("chazi_history")||"[]"); }catch(e){}
 if(!Array.isArray(histList)) histList = [];
 function saveHistory(){ try{ localStorage.setItem("chazi_history", JSON.stringify(histList)); }catch(e){} }
@@ -420,10 +426,12 @@ function playStrokeSequence(cell, i, data){
     g.style.visibility = "visible";
   }, delay + 400);
 }
+var TTS_VERSION = "2";
 var ttsCache = {}; // 朗读缓存：同字第二次点直接播，无需重新生成
-var prefetching = {}; // 文字 -> 在途请求，共享给预取和点击
+var prefetching = {}; // 语言+文字 -> 在途请求，共享给预取和点击
 var ttsRequestSeq = 0;
 var ttsActiveText = null;
+var ttsActiveLang = "zh";
 var ttsActiveRequest = null;
 var ttsActiveButton = null;
 var ttsPrerollTimer = null;
@@ -445,20 +453,22 @@ function stopTTSPlayback(){
 function cancelSpeech(){
   ttsRequestSeq++;
   if(ttsActiveRequest) ttsActiveRequest.abort();
-  ttsActiveRequest = null; ttsActiveText = null;
+  ttsActiveRequest = null; ttsActiveText = null; ttsActiveLang = "zh";
   stopTTSPlayback(); clearTTSButtons();
 }
-function speak(text, btn){
+function ttsKey(text, lang){ return String(lang === "en" ? "en" : "zh") + "|v" + TTS_VERSION + "|" + text; }
+function speak(text, btn, lang){
+  lang = lang === "en" ? "en" : "zh";
   ensureAudio();
   var seq = ++ttsRequestSeq;
-  if(ttsActiveRequest && ttsActiveText !== text){ try{ ttsActiveRequest.abort(); }catch(e){} }
+  if(ttsActiveRequest && (ttsActiveText !== text || ttsActiveLang !== lang)){ try{ ttsActiveRequest.abort(); }catch(e){} }
   stopTTSPlayback();
-  ttsActiveText = text;
+  ttsActiveText = text; ttsActiveLang = lang;
   clearTTSButtons();
   ttsActiveButton = btn || null;
   if(btn){ btn.classList.add("loading"); btn.setAttribute("aria-busy", "true"); }
-  var audioPromise = prefetchTTS(text);
-  var request = prefetching[text];
+  var audioPromise = prefetchTTS(text, lang);
+  var request = prefetching[ttsKey(text, lang)];
   ttsActiveRequest = request ? request.xhr : null;
   audioPromise.then(function(audio){
     if(seq !== ttsRequestSeq) return;
@@ -481,8 +491,8 @@ function playTTSSamples(samples, sampleRate, btn, seq){
       stopTTSPlayback();
       var buf = audioCtx.createBuffer(1, samples.length, sampleRate); buf.copyToChannel(samples, 0);
       var src = audioCtx.createBufferSource(); src.buffer = buf;
-      // 加增益确保音量
-      var gain = audioCtx.createGain(); gain.gain.value = 1.6;
+      // Keep provider levels stable; the server returns normalized audio.
+      var gain = audioCtx.createGain(); gain.gain.value = 1;
       src.connect(gain); gain.connect(audioCtx.destination);
       // Keep playback and its tail out of the next microphone preroll.
       clearTimeout(ttsPrerollTimer);
@@ -639,12 +649,13 @@ function floatToWav(samples, sr){
   for(var i=0;i<samples.length;i++){ var s=Math.max(-1,Math.min(1,samples[i])); v.setInt16(44+i*2,s<0?s*0x8000:s*0x7FFF,true); }
   return new Blob([buf],{type:"audio/wav"});
 }
-function cloudRecognize(samples){
+function cloudRecognize(samples, lang){
+  lang = lang === "en" ? "en" : "zh";
   return new Promise(function(resolve, reject){
     // 先重采样到 16kHz 再上传：默认 audioCtx 是 48kHz，体积 3 倍，弱带宽下光上传就要几秒
     var down = resample(samples, audioCtx.sampleRate, 16000);
     var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
-    var fd = new FormData(); fd.append("file", floatToWav(down, 16000), "audio.wav");
+    var fd = new FormData(); fd.append("file", floatToWav(down, 16000), "audio.wav"); fd.append("lang", lang);
     x.onload = function(){
       if(x.status !== 200){ reject(new Error("识别服务返回错误，请稍后重试（HTTP " + x.status + "）")); return; }
       var d;
@@ -660,6 +671,7 @@ function cloudRecognize(samples){
 }
 function stripTone(s){ return s.toLowerCase().normalize("NFD").replace(/u\u0308/g,"v").replace(/[\u0300-\u036f]/g,""); }
 function lookup(raw){
+  if(lookupLanguage === "en" && englishLookupController){ englishLookupController.lookup(raw); return; }
   var text = raw.replace(/\s+/g, ""); if(!text) return;
   // 多个汉字（如输入"好为人师"）→ 选字模式，列出所有字让小孩点选
   if(/[\u4e00-\u9fff]/.test(text) && shouldUseSelectMode(text)){ showSelectMode(text); return; }
@@ -912,18 +924,20 @@ function startRecTips(el){
 }
 function stopRecTips(){ if(rec.tipTimer){ clearInterval(rec.tipTimer); rec.tipTimer = null; } }
 // 预加载读音：页面显示时后台提前下好音频，点击时复用同一个在途请求。
-function prefetchTTS(text){
+function prefetchTTS(text, lang){
+  lang = lang === "en" ? "en" : "zh";
   if(!text) return Promise.reject(new Error("缺少朗读内容"));
-  if(ttsCache[text]) return Promise.resolve(ttsCache[text]);
-  if(prefetching[text]) return prefetching[text].promise;
+  var key = ttsKey(text, lang);
+  if(ttsCache[key]) return Promise.resolve(ttsCache[key]);
+  if(prefetching[key]) return prefetching[key].promise;
   var x = new XMLHttpRequest();
   var promise = new Promise(function(resolve, reject){
-    x.open("GET","/api/tts?text="+encodeURIComponent(text),true); x.responseType="arraybuffer"; x.timeout=8000;
+    x.open("GET","/api/tts?text="+encodeURIComponent(text)+"&lang="+lang+"&v="+TTS_VERSION,true); x.responseType="arraybuffer"; x.timeout=8000;
     x.onload = function(){
       if(x.status !== 200 || !x.response || x.response.byteLength <= 500){ reject(new Error("朗读服务返回失败")); return; }
       try{ ensureAudio(); audioCtx.decodeAudioData(x.response).then(function(buf){
         var audio = {samples:buf.getChannelData(0), sampleRate:buf.sampleRate};
-        ttsCache[text] = audio; resolve(audio);
+        ttsCache[key] = audio; resolve(audio);
       }).catch(function(){ reject(new Error("朗读音频解码失败")); }); }catch(e){ reject(new Error("朗读音频解码失败")); }
     };
     x.onerror = function(){ reject(new Error("朗读服务连接失败，请检查网络后重试")); };
@@ -931,8 +945,8 @@ function prefetchTTS(text){
     x.onabort = function(){ reject(new Error("朗读请求已取消")); };
     x.send();
   });
-  prefetching[text] = {promise:promise, xhr:x};
-  promise.then(function(){ delete prefetching[text]; }, function(){ delete prefetching[text]; });
+  prefetching[key] = {promise:promise, xhr:x};
+  promise.then(function(){ delete prefetching[key]; }, function(){ delete prefetching[key]; });
   return promise;
 }
 function prefetchTTSList(list, limit){
@@ -1029,13 +1043,17 @@ function cancelAutoRec(){
   setRecState("off");
   toast("已取消");
 }
-function submitRecording(samples, seq){
+function submitRecording(samples, seq, lang){
+  lang = lang === "en" ? "en" : "zh";
   if(samples.length < 1600){ setRecState("off"); toast("没听到声音，请再试一次"); return; }
   setRecState("recognize");
-  cloudRecognize(samples).then(function(text){
+  cloudRecognize(samples, lang).then(function(text){
     if(seq !== rec.captureSeq) return;
     setRecState("off");
-    if(text) handleVoiceResult(text); else toast("没听清，再按一次试试");
+    if(text){
+      if(lang === "en" && englishLookupController){ englishLookupController.handleRecognition(text); }
+      else if(lang === "zh") handleVoiceResult(text);
+    } else toast("没听清，再按一次试试");
   }).catch(function(err){
     if(seq !== rec.captureSeq) return;
     setRecState("off");
@@ -1050,7 +1068,7 @@ function scheduleAutoCapture(){
     stopWave();
     var recorderObj = rec.recorderObj; rec.recorderObj = null;
     if(!recorderObj){ setRecState("off"); return; }
-    submitRecording(recorderObj.stop(), rec.captureSeq);
+    submitRecording(recorderObj.stop(), rec.captureSeq, rec.language);
   }, 3000);
 }
 function startHold(){
@@ -1058,6 +1076,7 @@ function startHold(){
   if(!cloudASR){ toast("语音服务连不上，检查网络后再试"); return; }
   cancelSpeech();
   var seq = ++rec.captureSeq;
+  rec.language = lookupLanguage;
   rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.startTime = Date.now(); ensureAudio();
   if(rec.btn) rec.btn.classList.add("holding"); setRecState("listen");
   startRecording().then(function(recorderObj){
@@ -1093,7 +1112,7 @@ function endHold(autoStop){
   if(cancelled){ if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} } rec.recorderObj = null; return; }
   var recorderObj = rec.recorderObj; rec.recorderObj = null;
   if(!recorderObj){ toast("没听到声音，请再试一次"); return; }
-  submitRecording(recorderObj.stop(), rec.captureSeq);
+  submitRecording(recorderObj.stop(), rec.captureSeq, rec.language);
 }
 function startWave(){
   if(!rec.btn) return;
@@ -1317,7 +1336,7 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
   $("rSub").textContent = toneNum ? "点一下就能看笔顺和部首（第"+toneNum+"声）" : "点一下就能看笔顺和部首";
   showResultsPage(list, toneNum);
 }
-function clearSearch(){ $("searchInput").value=""; $("clearBtn").style.display="none"; $("searchInput").focus(); }
+function clearSearch(){ $("searchInput").value=""; $("clearBtn").style.display="none"; if(lookupLanguage === "en" && englishLookupController) englishLookupController.clear(); $("searchInput").focus(); }
 $("searchInput").addEventListener("input", function(){ $("clearBtn").style.display = this.value ? "block" : "none"; });
 
 // 语音调试台（隐藏开发工具，点主页右下角 ⚙ 打开）
@@ -1386,7 +1405,7 @@ $("debugClearList").onclick = function(){
   $("debugListBody").innerHTML = '<div style="color:#C8BCA8;text-align:center;padding:12px;">清单已清空</div>';
   toast("已清空");
 };
-$("searchInput").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ this.blur(); if(this.value.trim()) lookup(this.value.trim()); } });
+$("searchInput").addEventListener("keydown", function(ev){ if(ev.key==="Enter"){ this.blur(); if(this.value.trim()) lookup(this.value); } });
 renderHistCount();
 document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
 
@@ -1424,6 +1443,45 @@ if("serviceWorker" in navigator && (location.protocol === "https:" || ["127.0.0.
     window.__swReady = true;
   }).catch(function(){});
 }
+function setLookupLanguage(lang){
+  lookupLanguage = lang === "en" ? "en" : "zh";
+  cancelSpeech();
+  if(rec){
+    if(rec.active || rec.autoMode) cancelAutoRec();
+    else { rec.captureSeq++; setRecState("off"); }
+  }
+  var home = $("home");
+  if(home){
+    home.style.removeProperty("display");
+    home.classList.toggle("english-mode", lookupLanguage === "en");
+  }
+  var input = $("searchInput");
+  if(input) input.placeholder = lookupLanguage === "en" ? "输入英文单词或句子" : "认识字？输入拼音也可以";
+  var recBtn = $("recBtn");
+  if(recBtn){
+    recBtn.setAttribute("aria-label", lookupLanguage === "en" ? "按住说英语" : "按住说话查字");
+    var hint = recBtn.querySelector(".hint"); if(hint) hint.textContent = lookupLanguage === "en" ? "按住说英语" : "按住说字";
+  }
+}
+window.addEventListener("english-lookup-ready", function(event){
+  var create = event.detail && event.detail.create;
+  if(typeof create !== "function") return;
+  englishLookupController = create({
+    root: $("englishLookupRoot"),
+    input: $("searchInput"),
+    toggle: $("languageMode"),
+    speak: function(text, button, lang){ speak(text, button, lang); },
+    prefetchTTS: function(text, lang){ return prefetchTTS(text, lang); },
+    cancelSpeech: function(){ cancelSpeech(); },
+    icon: function(name){ return window.LucideIcons ? window.LucideIcons.icon(name) : null; },
+    isEnglish: function(){ return lookupLanguage === "en"; },
+    onLanguageChange: setLookupLanguage
+  });
+  englishLookupController.setLanguage("zh");
+});
 </script>
+<link rel="stylesheet" href="english-lookup.css">
+<script src="lucide-icons.js"></script>
+<script src="english-lookup.js"></script>
 </body>
 </html>
