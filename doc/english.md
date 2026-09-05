@@ -1,5 +1,11 @@
 # English lookup contract
 
+The child-facing page uses voice-only entry for both Chinese and English.
+One persistent microphone and language selector sit beside the results in
+iPad landscape and above them in portrait. Recognized English is queried
+directly, without an editable input. Sentence words remain tappable; returning
+from a word or a lookup error restores the original sentence.
+
 `POST /api/english` accepts JSON `{ "text": string }`. Text may contain at
 most 300 characters and 500 UTF-8 bytes. The original text is returned as
 `query`; it is not trimmed, case-folded, or apostrophe-normalized in the

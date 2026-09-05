@@ -33,15 +33,11 @@
 
   function createEnglishLookup(config){
     var root = config.root;
-    var input = config.input;
     var toggle = config.toggle;
     var state = { seq:0, controller:null, timeoutId:null, lastQuery:"", sentence:null, wordFromSentence:false };
     var status = node("div", "english-status");
     status.setAttribute("role", "status");
     var resultBox = node("div", "english-result");
-    var submit = buttonWithIcon(config, "english-submit", "search", "查词", "查词");
-    submit.addEventListener("click", function(){ lookup(input.value, false); });
-    input.parentNode.appendChild(submit);
     root.innerHTML = "";
     root.appendChild(status);
     root.appendChild(resultBox);
@@ -97,7 +93,6 @@
         if(state.sentence){
           abortPending();
           config.cancelSpeech();
-          input.value = state.sentence.text;
           state.lastQuery = state.sentence.text;
           state.wordFromSentence = false;
           renderSentence(state.sentence.result, state.sentence.text);
@@ -154,7 +149,6 @@
           button.type = "button";
           button.setAttribute("aria-label", "查询 " + word);
           button.addEventListener("click", function(){
-            input.value = word;
             lookup(word, true);
           });
           fragment.appendChild(button);
@@ -214,7 +208,7 @@
       if(Array.from(query).length > 300 || utf8Bytes(query) > 500){
         state.lastQuery = query;
         state.wordFromSentence = !!fromSentence;
-        status.textContent = "最多输入 300 个字符";
+        status.textContent = "";
         renderError("内容太长了");
         return;
       }
@@ -266,7 +260,6 @@
         button.setAttribute("aria-selected", selected ? "true" : "false");
       });
       root.hidden = !isEnglish;
-      submit.hidden = !isEnglish;
       if(!isEnglish) clear();
       config.onLanguageChange(language);
     }
@@ -276,8 +269,6 @@
     });
     root.hidden = true;
     return { lookup:lookup, clear:clear, handleRecognition:function(text){
-      input.value = text;
-      input.dispatchEvent(new Event("input", {bubbles:true}));
       lookup(text, false);
     }, setLanguage:setLanguage };
   }
