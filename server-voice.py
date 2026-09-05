@@ -293,7 +293,8 @@ def asr_handler():
         t0 = time.time()
         text, engine, dur = recognize(audio_data)
         print(f"[asr] {engine} {time.time()-t0:.2f}s (音频 {dur:.1f}s) -> {text!r}", flush=True)
-        return jsonify({"text": text})
+        provider = {"xfyun": "讯飞"}.get(engine, "本地")
+        return jsonify({"text": text, "provider": provider})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

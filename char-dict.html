@@ -636,7 +636,7 @@ function cloudRecognize(samples){
       var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
       var fd = new FormData(); fd.append("file", floatToWav(down, 16000), "audio.wav");
       // 空文本是有效结果（没说话/没听清），绝不回退本地——否则每次误触都会触发 78MB 离线模型下载
-      x.onload = function(){ try{ var d = JSON.parse(x.responseText); r((d && d.text) ? d.text.trim() : ""); }catch(e){ r(""); } };
+      x.onload = function(){ try{ var d = JSON.parse(x.responseText); window.__asrProvider = (d && d.provider) || ""; if(d && d.text) r(d.text.trim()); else r(""); }catch(e){ r(""); } };
       x.onerror = x.ontimeout = function(){
         if(attempts < 2){ setTimeout(sendOnce, 800); return; } // 云端瞬时抖动：先重试一次
         toast("网络不太好，等下再试一次");
@@ -1136,7 +1136,8 @@ function shouldUseSelectMode(text){
 // 语音整句模式：识别结果原样输出（保留重复与顺序），渲染成主区域大卡片，点任意字查详情
 function showSentenceMode(text){
   $("rTitle").textContent = "📖 你说的是：";
-  $("rSub").textContent = "点句子里的字，看笔顺和部首";
+  var src = window.__asrProvider ? "（" + window.__asrProvider + "识别）" : "";
+  $("rSub").textContent = "点句子里的字，看笔顺和部首 " + src;
   var echo = $("voiceEcho");
   echo.style.display = "block";
   var et = $("voiceEchoTxt");
@@ -1160,7 +1161,10 @@ function showSentenceMode(text){
       })(ch);
     } else {
       card.className = "char-card sent-miss";
-      card.innerHTML = '<div class="zi">' + esc(ch) + '</div><div class="py">字库暂无</div>';
+      card.innerHTML = '<div class="zi">' + esc(ch) + '</div><div class="py">词库暂无</div>';
+      (function(z){
+        card.onclick = function(){ toast("「" + z + "」还没收进词库，可以在上面输入框用拼音查"); };
+      })(ch);
     }
     box.appendChild(card);
   }
@@ -1313,7 +1317,7 @@ document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true
 function pingCloud(){
   return new Promise(function(resolve){
     var done = false;
-    var x = new XMLHttpRequest(); x.open("GET", "/api/ping?_t=" + Date.now(), true); x.timeout = 5000;
+    var x = new XMLHttpRequest(); x.open("GET", "/api/ping?_t=" + Date.now(), true); x.timeout = 3000;
     x.onload = function(){ if(done) return; done = true; try{ resolve(JSON.parse(x.responseText)); }catch(e){ resolve(null); } };
     x.onerror = x.ontimeout = function(){ if(done) return; done = true; resolve(null); };
     x.send();
@@ -1336,7 +1340,7 @@ var cloudProbeDone = false;
     toast("语音服务连不上，检查网络后再试");
     setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
   });
-})(2);
+})(1);
 // ── 朗读音频离线包：Service Worker 缓存全部字典读音，点字零网络 ──
 // 仅 HTTPS + 正常模式（隐身模式 Safari 禁用 SW，自动跳过走原路径，不影响使用）
 function prewarmSWTTS(){
@@ -1344,13 +1348,18 @@ function prewarmSWTTS(){
   var chars = Object.keys(DICT);
   if(!chars.length) return;
   var firstRun = !localStorage.getItem("swPrewarmDone");
-  var CONC = 6, idx = 0, done = 0;
+  var CONC = 2, idx = 0, done = 0, lastTouch = 0;
+  // 用户有任何操作（点字/说话）就给网络让路：检测到 3 秒内有过交互，批次间隔自动放大
+  var markTouch = function(){ lastTouch = Date.now(); };
+  document.addEventListener("touchstart", markTouch, {passive:true});
+  document.addEventListener("pointerdown", markTouch, {passive:true});
   var next = function(){
     if(idx >= chars.length){
       try{ localStorage.setItem("swPrewarmDone", "1"); }catch(e){}
       if(firstRun) toast("✓ 语音已全部存到本机，以后秒响");
       return;
     }
+    var wait = (Date.now() - lastTouch < 3000) ? 2500 : 600;
     var batch = chars.slice(idx, idx + CONC); idx += CONC;
     Promise.all(batch.map(function(ch){
       // 命中 SW 缓存时本地直回（无网络流量）；未命中会被 SW 拉回并存入
@@ -1358,8 +1367,8 @@ function prewarmSWTTS(){
     })).then(function(){
       done += batch.length;
       if(firstRun && done % 400 === 0) toast("正在把语音存到本机 " + done + "/" + chars.length);
-      setTimeout(next, 30);
-    }).catch(function(){ setTimeout(next, 800); });
+      setTimeout(next, wait);
+    }).catch(function(){ setTimeout(next, 1500); });
   };
   next();
 }
