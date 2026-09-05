@@ -31,8 +31,7 @@ def xfyun(wav_bytes, language, accent):
     pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes()
     chunks = [pcm[i:i+1280] for i in range(0, len(pcm), 1280)]
     date = formatdate(usegmt=True)
-    origin = "host: iat.xf-yun.com
-date: " + date + "\nGET /v1 HTTP/1.1"
+    origin = "host: iat.xf-yun.com" + chr(10) + "date: " + date + chr(10) + "GET /v1 HTTP/1.1"
     sig = base64.b64encode(hmac.new(SECRET.encode(), origin.encode(), hashlib.sha256).digest()).decode()
     auth = base64.b64encode(('api_key="' + KEY + '", algorithm="hmac-sha256", headers="host date request-line", signature="' + sig + '"').encode()).decode()
     url = "wss://iat.xf-yun.com/v1?" + urlencode({"authorization": auth, "date": date, "host": "iat.xf-yun.com"})
