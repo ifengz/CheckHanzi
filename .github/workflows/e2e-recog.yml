@@ -1,0 +1,19 @@
+name: 识别E2E（中文短长同音小音量，手动）
+
+on:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: 合成语音并走线上识别对比
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: bash .github/scripts/e2e-recog.sh
