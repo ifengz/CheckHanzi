@@ -8,6 +8,16 @@ for t in 饭 天 好; do
 done
 echo "=== 2) 缓存文件数 ==="
 ls /opt/chazi-voice/tts-cache/*.mp3 2>/dev/null | wc -l
+echo "=== 2c) 站点代码是否为最新修复版 ==="
+SW=$(find /www/wwwroot -maxdepth 3 -name "char-dict.html" 2>/dev/null | head -1)
+if [ -n "$SW" ]; then
+  echo "  站点文件: $SW"
+  for pat in "CONC = 2" "lastTouch < 3000" "provider" "讯飞识别" "还没收进词库"; do
+    grep -q "$pat" "$SW" && echo "  ✓ 含: $pat" || echo "  ✗ 缺: $pat"
+  done
+fi
+echo "=== 2d) 语音服务 provider 字段 ==="
+grep -c 'provider' /opt/chazi-voice/server-voice.py | sed 's/^/  server-voice.py 含 provider 处数: /'
 echo "=== 2b) sw.js 是否已部署到站点 ==="
 find /www/wwwroot -maxdepth 3 -name "sw.js" 2>/dev/null | head -3 | sed 's/^/  /'
 SW=$(find /www/wwwroot -maxdepth 3 -name "sw.js" 2>/dev/null | head -1)
