@@ -45,7 +45,6 @@ SV_MODEL_PATH = os.path.join(SENSEVOICE_DIR, "model.int8.onnx")
 SV_TOKENS_PATH = os.path.join(SENSEVOICE_DIR, "tokens.txt")
 
 # ── 识别引擎（常驻内存，启动时后台加载）────────────────────────
-_sv_recognizer = None      # sherpa-onnx SenseVoice
 _whisper_model = None      # faster-whisper 回退
 ENGINE_STATUS = "未加载"   # 实际加载状态（/api/ping 如实上报，便于排查静默回退）
 _model_lock = threading.Lock()
@@ -213,6 +212,23 @@ def xfyun_asr(wav_bytes: bytes):
     return text, len(samples) / 16000
 
 # ── SenseVoice-small（主引擎，sherpa-onnx）─────────────────────
+_sv_recognizer = None      # 中文
+_sv_en_recognizer = None   # 英文（SenseVoice 原生支持 en，比 whisper 快 20 倍）
+
+def _make_sensevoice(language):
+    """按语种建 SenseVoice 实例；模型文件缺失返回 None"""
+    if not (os.path.exists(SV_MODEL_PATH) and os.path.exists(SV_TOKENS_PATH)):
+        print(f"[asr] 未找到模型文件 {SV_MODEL_PATH}，回退 faster-whisper", flush=True)
+        return None
+    import sherpa_onnx
+    return sherpa_onnx.OfflineRecognizer.from_sense_voice(
+        model=SV_MODEL_PATH,
+        tokens=SV_TOKENS_PATH,
+        num_threads=min(4, os.cpu_count() or 2),
+        use_itn=True,
+        language=language,
+    )
+
 def get_sensevoice():
     global _sv_recognizer
     if ASR_ENGINE != "sensevoice":
@@ -220,26 +236,26 @@ def get_sensevoice():
     if _sv_recognizer is None:
         with _model_lock:
             if _sv_recognizer is None:
-                if not (os.path.exists(SV_MODEL_PATH) and os.path.exists(SV_TOKENS_PATH)):
-                    print(f"[asr] 未找到模型文件 {SV_MODEL_PATH}，回退 faster-whisper", flush=True)
-                    return None
-                import sherpa_onnx
-                _sv_recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
-                    model=SV_MODEL_PATH,
-                    tokens=SV_TOKENS_PATH,
-                    num_threads=min(4, os.cpu_count() or 2),
-                    use_itn=True,
-                    language="zh",
-                )
-                print("[asr] SenseVoice-small(sherpa-onnx) 就绪 ✓", flush=True)
-                globals()["ENGINE_STATUS"] = "SenseVoice-small ✓"
+                _sv_recognizer = _make_sensevoice("zh")
+                if _sv_recognizer is not None:
+                    print("[asr] SenseVoice-small(sherpa-onnx) 就绪 ✓", flush=True)
+                    globals()["ENGINE_STATUS"] = "SenseVoice-small ✓"
     return _sv_recognizer
 
-def sensevoice_asr(wav_bytes: bytes):
-    """SenseVoice 识别，返回 (文本, 时长秒)；引擎不可用时返回 (None, 0.0)"""
-    rec = get_sensevoice()
-    if rec is None:
-        return None, 0.0
+def get_sensevoice_en():
+    """英文 SenseVoice：讯飞 zh_cn 对英文常空/粘连时，用它快速重认（whisper 太慢只做最后兜底）"""
+    global _sv_en_recognizer
+    if ASR_ENGINE != "sensevoice":
+        return None
+    if _sv_en_recognizer is None:
+        with _model_lock:
+            if _sv_en_recognizer is None:
+                _sv_en_recognizer = _make_sensevoice("en")
+                if _sv_en_recognizer is not None:
+                    print("[asr] SenseVoice-small(en) 就绪 ✓", flush=True)
+    return _sv_en_recognizer
+
+def _sv_decode(rec, wav_bytes):
     samples, sr = wav_bytes_to_samples(wav_bytes)
     if samples.size < sr // 10:  # <0.1s 视为无效
         return "", len(samples) / sr
@@ -249,6 +265,13 @@ def sensevoice_asr(wav_bytes: bytes):
         rec.decode_stream(stream)
         text = stream.result.text
     return postprocess(text), len(samples) / sr
+
+def sensevoice_asr(wav_bytes: bytes, lang: str = "zh"):
+    """SenseVoice 识别，返回 (文本, 时长秒)；引擎不可用时返回 (None, 0.0)。lang='en' 走英文实例"""
+    rec = get_sensevoice_en() if lang == "en" else get_sensevoice()
+    if rec is None:
+        return None, 0.0
+    return _sv_decode(rec, wav_bytes)
 
 # ── faster-whisper（回退引擎）──────────────────────────────────
 def get_whisper():
@@ -297,8 +320,14 @@ def recognize(wav_bytes: bytes):
             if text is not None:
                 if text and not _englishish(text):
                     return text, "xfyun", dur
-                # 空结果 或 英文为主的结果 → 本地补一轮（whisper 英文远好于讯飞 zh_cn）
+                # 英文为主的结果：讯飞 zh_cn 拼写不可信（Helloeveryone 粘连），SenseVoice-en 快认（~0.4s），whisper 最后兜底
                 if text and _englishish(text):
+                    try:
+                        etext, edur = sensevoice_asr(wav_bytes, lang="en")
+                        if etext:
+                            return etext, "sensevoice-en", edur
+                    except Exception as e:
+                        print(f"[asr] sensevoice-en 重认异常({e})", flush=True)
                     try:
                         wtext, wdur = whisper_asr(wav_bytes, lang=None)
                         if wtext:
@@ -313,6 +342,12 @@ def recognize(wav_bytes: bytes):
                         return stext, "sensevoice", sdur
                 except Exception as e:
                     print(f"[asr] sensevoice 补识别异常({e})", flush=True)
+                try:
+                    etext, edur = sensevoice_asr(wav_bytes, lang="en")
+                    if etext:
+                        return etext, "sensevoice-en", edur
+                except Exception as e:
+                    print(f"[asr] sensevoice-en 补识别异常({e})", flush=True)
                 try:
                     wtext, wdur = whisper_asr(wav_bytes, lang=None)
                     if wtext:
@@ -420,10 +455,9 @@ if __name__ == "__main__":
     threading.Thread(
         target=lambda: (
             print("预热识别模型…", flush=True),
-            # SenseVoice 先就绪（中文主路径）；whisper 也后台预热——
-            # 否则讯飞空结果转英文兜底时冷加载要 5-7 秒（日志实测），孩子端就是"没响应"
-            get_sensevoice() if ASR_ENGINE == "sensevoice" else get_whisper(),
-            get_whisper(),
+            # 预热 SenseVoice 中/英两个实例（各 ~500MB，推理 0.4s 级）：中文主路径 + 英文快路径。
+            # whisper 不再常驻预热——服务器内存吃紧（swap 已满），且它现在只是罕见最后兜底，用时再懒加载。
+            (get_sensevoice(), get_sensevoice_en()) if ASR_ENGINE == "sensevoice" else get_whisper(),
             print("模型就绪 ✓", flush=True),
         ),
         daemon=True,
