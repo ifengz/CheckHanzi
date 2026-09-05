@@ -3,7 +3,7 @@
 set -euo pipefail
 PY=/opt/chazi-voice/venv/bin/python
 
-export XFYUN_APP_ID="$XFYUN_APP_ID" XFYUN_API_KEY="$XFYUN_API_KEY" XFYUN_API_SECRET="$XFYUN_API_SECRET"
+: "$XFYUN_APP_ID" "$XFYUN_API_KEY" "$XFYUN_API_SECRET"  # 由 ssh 命令前缀传入，set -u 校验
 
 $PY - <<'PYEOF'
 import os, sys, io, wave, json, base64, hashlib, hmac, ssl, asyncio, subprocess, tempfile

@@ -27,4 +27,4 @@ jobs:
           SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
           $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /tmp/chazi-exp"
           cat .github/scripts/exp-en-asr.sh | $SSH "$SSH_USER@$SSH_HOST" "cat > /tmp/chazi-exp/exp.sh"
-          $SSH "$SSH_USER@$SSH_HOST" "bash /tmp/chazi-exp/exp.sh"
+          $SSH "$SSH_USER@$SSH_HOST" "XFYUN_APP_ID='$XFYUN_APP_ID' XFYUN_API_KEY='$XFYUN_API_KEY' XFYUN_API_SECRET='$XFYUN_API_SECRET' bash /tmp/chazi-exp/exp.sh"
