@@ -7,6 +7,7 @@ set -eu
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/e2e_key -p ${SSH_PORT:-22}"
 SCP="scp -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/e2e_key -P ${SSH_PORT:-22}"
 
+mkdir -p ~/.ssh
 printf '%s\n' "$SSH_KEY" > ~/.ssh/e2e_key
 chmod 600 ~/.ssh/e2e_key
 
