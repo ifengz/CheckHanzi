@@ -429,8 +429,11 @@ function speak(text, btn){
   if(ttsCache[text]){ playTTSSamples(ttsCache[text].samples, ttsCache[text].sampleRate); return; }
   // 云端 TTS 优先（edge-tts 微软晓晓，免费无限高质量）
   if(!window.__speakCloudDisabled){
+    var _ttsT0 = Date.now();
     var x = new XMLHttpRequest(); x.open("GET","/api/tts?text="+encodeURIComponent(text),true); x.responseType="arraybuffer"; x.timeout=6000;
     x.onload = function(){
+      // 首次耗时打点：>500ms 说明走的网络（缓存未热），提示一次帮助定位慢在哪
+      if(!ttsCache[text] && x.status===200){ var _ms = Date.now()-_ttsT0; if(_ms>500 && !window.__ttsSlowTipShown){ window.__ttsSlowTipShown = 1; toast("朗读加载 "+(_ms/1000).toFixed(1)+" 秒"); } }
       if(x.status===200 && x.response && x.response.byteLength>500){
         try{
           playing(true); var b = x.response;
