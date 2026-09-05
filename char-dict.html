@@ -848,7 +848,7 @@ $("histBack").addEventListener("click", function(){
 });
 $("clearHistory").addEventListener("click", function(){ histList = []; saveHistory(); renderHistCount(); renderHistory(); });
 var detailFrom = "home"; // 记录从哪个页面进入详情页
-$("backBtn").addEventListener("click", function(){ try{ speechSynthesis.cancel(); }catch(e){} if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc=null; } cleanups.forEach(function(t){ clearInterval(t.interval); }); cleanups=[]; $("detail").classList.remove("show"); if(detailFrom === "results"){ $("results").classList.add("show"); } else if(detailFrom === "history"){ $("history").classList.add("show"); } else { $("home").style.display = "flex"; } });
+$("backBtn").addEventListener("click", function(){ try{ speechSynthesis.cancel(); }catch(e){} if(ttsAudioSrc){ try{ ttsAudioSrc.stop(); }catch(e){} ttsAudioSrc=null; } cleanups.forEach(function(t){ clearInterval(t.interval); }); cleanups=[]; $("detail").classList.remove("show"); if(detailFrom === "results"){ $("results").classList.add("show"); } else if(detailFrom === "history"){ $("history").classList.add("show"); renderHistory(); } else { $("home").style.display = "flex"; } });
 $("detHistBtn").addEventListener("click", openHistory);
 var rec = { active:false, timer:null, startTime:0, cancelled:false, startY:0, animTimer:null, autoTimer:null, btn:null, tipTimer:null };
 // 识别等待提示语：让孩子知道"它在认真工作"，轮播缓解等待无聊
