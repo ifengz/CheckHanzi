@@ -8,14 +8,12 @@ for t in 饭 天 好; do
 done
 echo "=== 2) 缓存文件数 ==="
 ls /opt/chazi-voice/tts-cache/*.mp3 2>/dev/null | wc -l
-echo "=== 3) 经 Nginx 站点访问（找站点根 + 计时）==="
-SITE_DIR=$(nginx -T 2>/dev/null | grep -oP 'root\s+\K[^;]+' | head -1)
-echo "  站点根: $SITE_DIR"
-if [ -n "$SITE_DIR" ] && [ -f "$SITE_DIR/char-dict.html" ]; then
-  curl -s -o /dev/null -w "  本机经 nginx /api/tts?text=饭 → %{time_total}s (HTTP %{http_code})\n" "http://127.0.0.1/api/tts?text=%E9%A5%AD"
-  curl -s -I "http://127.0.0.1/api/tts?text=%E9%A5%AD" | grep -iE "cache-control|content-type|HTTP/" | sed 's/^/  /'
-else
-  echo "  未找到站点 char-dict.html，跳过 nginx 测试"
-fi
+echo "=== 3) 经 Nginx 全链路（80/443，验证 Cache-Control 透传）==="
+for p in 80 443; do
+  echo "  -- 端口 $p --"
+  curl -sk -D- -o /dev/null --max-time 5 "http$( [ $p = 443 ] && echo s )://127.0.0.1/api/tts?text=%E9%A5%AD" 2>/dev/null | grep -iE "^HTTP/|cache-control|content-type|content-length" | sed 's/^/  /'
+done
+echo "  -- HTML 缓存头 --"
+curl -sk -D- -o /dev/null --max-time 5 "http://127.0.0.1/char-dict.html" 2>/dev/null | grep -iE "^HTTP/|cache-control|expires|last-modified" | sed 's/^/  /'
 echo "=== 4) 语音服务最近日志 ===="
 journalctl -u chazi-voice -n 5 --no-pager 2>/dev/null | tail -5
