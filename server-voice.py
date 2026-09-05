@@ -52,11 +52,32 @@ _infer_lock = threading.Lock()  # 推理串行化（单线程推理 15ms 级，�
 
 _CN_DIGITS = "零一二三四五六七八九"
 
+def _num_to_cn(n):
+    """0~999 按中文读法：10→十、15→十五、105→一百零五、110→一百一十；超范围返回 None"""
+    if n < 10: return _CN_DIGITS[n]
+    if n < 20: return "十" + (_CN_DIGITS[n % 10] if n % 10 else "")
+    if n < 100: return _CN_DIGITS[n // 10] + "十" + (_CN_DIGITS[n % 10] if n % 10 else "")
+    if n < 1000:
+        s = _CN_DIGITS[n // 100] + "百"
+        r = n % 100
+        if r == 0: return s
+        if r < 10: return s + "零" + _CN_DIGITS[r]
+        if r < 20: return s + "一十" + (_CN_DIGITS[r % 10] if r % 10 else "")
+        return s + _num_to_cn(r)
+    return None
+
 def digits_to_cn(text: str) -> str:
-    """识别引擎开 ITN 会把口述数字转成阿拉伯数字（如"四"→"4"），查字场景必须转回汉字"""
+    """识别引擎开 ITN 会把口述数字转成阿拉伯数字（如"四"→"4"），查字场景必须转回汉字。
+    连续数字按整数值转中文读法（"10"→十 而不是 一零）；带前导零或超过 3 位（电话号类）逐位转"""
     if not any("0" <= c <= "9" for c in text):
         return text
-    return "".join(_CN_DIGITS[int(c)] if "0" <= c <= "9" else c for c in text)
+    def repl(m):
+        s = m.group(0)
+        if len(s) > 3 or (len(s) > 1 and s[0] == "0"):
+            return "".join(_CN_DIGITS[int(c)] for c in s)
+        cn = _num_to_cn(int(s))
+        return cn if cn else "".join(_CN_DIGITS[int(c)] for c in s)
+    return re.sub(r"\d+", repl, text)
 
 def to_simplified(text: str) -> str:
     try:
