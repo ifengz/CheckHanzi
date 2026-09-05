@@ -14,6 +14,11 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v4
 
+      - name: 检查页面与字库
+        run: |
+          node .github/scripts/check-client.mjs
+          node .github/scripts/check-dictionary.mjs
+
       - name: rsync 同步到服务器
         uses: burnett01/rsync-deployments@7.0.2
         with:

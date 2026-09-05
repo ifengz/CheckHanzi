@@ -17,3 +17,11 @@ char-dict.template.html
 # 系统
 .DS_Store//
 .dsh-vision-toolkit/
+
+# Local task records
+/doc/core/lessons.md
+/doc/core/task_plan.md
+/doc/core/progress.md
+/doc/core/findings.md
+/doc/test/
+__pycache__/

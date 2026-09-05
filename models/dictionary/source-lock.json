@@ -1,0 +1,17 @@
+{
+  "unihan": {
+    "version": "17.0.0",
+    "url": "https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip",
+    "sha256": "f7a48b2b545acfaa77b2d607ae28747404ce02baefee16396c5d2d7a8ef34b5e"
+  },
+  "cjk_radicals": {
+    "version": "17.0.0",
+    "url": "https://www.unicode.org/Public/17.0.0/ucd/CJKRadicals.txt",
+    "sha256": "826f83be25cd18fb8a5015a514704504e1982e840ea14d058bf583e1cc620c83"
+  },
+  "hanzi_writer": {
+    "commit": "68d10a4b21150cae5e1ebbd223eed289cf32d90c",
+    "url": "https://github.com/chanind/hanzi-writer-data/tree/68d10a4b21150cae5e1ebbd223eed289cf32d90c",
+    "all_json_sha256": "95118b0c4d5cc378a3da49293b1e8e41bbd29eadb2c6544573dfd61f4b00b679"
+  }
+}
