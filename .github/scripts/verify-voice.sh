@@ -25,3 +25,7 @@ PYEOF
 
 echo "=== 3) 服务最近日志 ===="
 journalctl -u chazi-voice -n 8 --no-pager 2>/dev/null | tail -8 || tail -8 /opt/chazi-voice/voice.log 2>/dev/null || true
+
+echo "=== 4) 内存与负载 ==="
+free -m | head -3
+nproc
