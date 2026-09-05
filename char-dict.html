@@ -1337,6 +1337,39 @@ var cloudProbeDone = false;
     setTimeout(function(){ if(!engine.ttsReady && !engine.ttsLoading) initTTSEngine(); }, 6000);
   });
 })(2);
+// ── 朗读音频离线包：Service Worker 缓存全部字典读音，点字零网络 ──
+// 仅 HTTPS + 正常模式（隐身模式 Safari 禁用 SW，自动跳过走原路径，不影响使用）
+function prewarmSWTTS(){
+  if(!window.__swReady || !window.DICT) return;
+  var chars = Object.keys(DICT);
+  if(!chars.length) return;
+  var firstRun = !localStorage.getItem("swPrewarmDone");
+  var CONC = 6, idx = 0, done = 0;
+  var next = function(){
+    if(idx >= chars.length){
+      try{ localStorage.setItem("swPrewarmDone", "1"); }catch(e){}
+      if(firstRun) toast("✓ 语音已全部存到本机，以后秒响");
+      return;
+    }
+    var batch = chars.slice(idx, idx + CONC); idx += CONC;
+    Promise.all(batch.map(function(ch){
+      // 命中 SW 缓存时本地直回（无网络流量）；未命中会被 SW 拉回并存入
+      return fetch("/api/tts?text=" + encodeURIComponent(ch)).catch(function(){});
+    })).then(function(){
+      done += batch.length;
+      if(firstRun && done % 400 === 0) toast("正在把语音存到本机 " + done + "/" + chars.length);
+      setTimeout(next, 30);
+    }).catch(function(){ setTimeout(next, 800); });
+  };
+  next();
+}
+if("serviceWorker" in navigator && (location.protocol === "https:" || ["127.0.0.1", "localhost"].includes(location.hostname))){
+  navigator.serviceWorker.register("sw.js").then(function(){
+    window.__swReady = true;
+    // 等 15 秒（避开首屏与识别抢带宽），后台静默跑全字典预缓存
+    setTimeout(prewarmSWTTS, 15000);
+  }).catch(function(){});
+}
 // 后台预加载笔顺数据（9MB），让详情页首次点击零延迟
 setTimeout(function(){ if(!strokeBundle) fetchJSON("models/strokes/stroke_data.json", function(d){ strokeBundle = d; }, function(){}); }, 2000);
 </script>
