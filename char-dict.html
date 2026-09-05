@@ -58,7 +58,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #resultChars{display:flex;width:100%;justify-content:center;align-items:center;gap:clamp(12px,2vh,24px);flex-wrap:wrap;flex-shrink:0;}
 .char-card{min-width:clamp(120px,15vw,220px);flex:1;max-width:clamp(170px,27vw,280px);background:#fff;border:3px solid #FFE0B8;border-radius:clamp(14px,2vh,24px);padding:clamp(12px,2vh,24px) clamp(12px,1.8vw,18px) clamp(12px,2vh,22px);display:flex;flex-direction:column;align-items:center;box-shadow:0 6px 20px rgba(255,122,0,.12);transition:transform .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .char-card .zi{font-size:96px;line-height:1.5;flex-shrink:0;font-weight:700;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;}
-.char-card .py{font-size:clamp(20px,3vh,30px);color:#BB8C4F;font-weight:700;margin-top:clamp(3px,.5vh,8px);}
+.char-card .py{font-size:28px;line-height:1.35;letter-spacing:0;color:#BB8C4F;font-weight:700;margin-top:clamp(3px,.5vh,8px);}
 .char-card .spk{width:clamp(42px,6vh,60px);height:clamp(42px,6vh,60px);border-radius:50%;border:3px solid #FFE0B8;margin-top:clamp(6px,1vh,14px);background:#fff;color:#2D2A26;font-size:clamp(18px,3vh,26px);flex-shrink:0;transition:transform .12s,background .12s;}
 .char-card .spk.playing{background:#FF9D3C;border-color:#FF9D3C;color:#fff;}
 .char-card:active,.char-card.pressed{transform:scale(.96);border-color:#FF9D3C;}
@@ -66,7 +66,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 /* 详情页 */
 #detailBody{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(2px,.4vh,8px);overflow-y:auto;overflow-x:hidden;padding:0 clamp(10px,1.6vw,16px) clamp(12px,1.6vh,16px);justify-content:flex-start;}
 .char-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:clamp(14px,2vh,28px);border:3px solid #F0E0C8;padding:clamp(8px,1.2vh,14px) clamp(12px,2vw,16px);flex:0 0 auto;min-height:0;box-shadow:0 4px 16px rgba(0,0,0,.04);}
-#detailPinyin{font-size:clamp(18px,3vh,32px);color:#BB8C4F;font-weight:700;letter-spacing:6px;margin-bottom:clamp(1px,.3vh,6px);}
+#detailPinyin{font-size:56px;line-height:1.3;color:#BB8C4F;font-weight:700;letter-spacing:0;margin-bottom:clamp(1px,.3vh,6px);flex-shrink:0;}
 #detailChar{font-size:280px;font-weight:700;line-height:1.5;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;max-width:100%;overflow:visible;white-space:nowrap;flex-shrink:0;}
 #detailChar:active,#detailChar.pressed{transform:scale(.88);}
 #detailMeta{font-size:clamp(11px,1.6vh,14px);color:#C8BCA8;margin-top:clamp(1px,.3vh,4px);}
@@ -114,11 +114,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   #voiceEcho{margin-top:2px;padding:4px 10px;font-size:clamp(11px,1.5vh,13px);}
   .char-card{min-width:clamp(100px,12vw,160px);max-width:clamp(130px,18vw,200px);padding:clamp(10px,1.6vh,20px) 12px clamp(10px,1.6vh,18px);border-width:2px;border-radius:clamp(10px,1.4vh,16px);}
   .char-card .zi{font-size:clamp(64px,10vh,120px);} /* 实际由 fitResultCards 动态覆盖 */
-  .char-card .py{font-size:clamp(16px,2.4vh,24px);margin-top:clamp(2px,.4vh,6px);}
   .char-card .spk{width:clamp(36px,5vh,50px);height:clamp(36px,5vh,50px);font-size:clamp(16px,2.4vh,22px);margin-top:clamp(4px,.6vh,10px);border-width:2px;}
   #resultChars{gap:clamp(8px,1.4vh,16px);}
   #resMainArea{gap:clamp(8px,1.2vh,16px);padding:clamp(4px,.6vh,10px) clamp(10px,1.6vw,16px);}
   .res-speak{padding:clamp(8px,1.2vh,14px);font-size:clamp(16px,2.2vh,22px);max-width:260px;}
+}
+@media (min-width:900px) and (orientation:landscape){
+  #detailBody{display:grid;grid-template-columns:minmax(300px,36%) minmax(0,1fr);gap:24px;padding:12px 24px 20px;overflow:hidden;background:#fff;}
+  #detailBody .char-hero{min-width:0;min-height:0;padding:16px 24px 16px 0;border:0;border-right:1px solid #e5e7e8;border-radius:0;background:transparent;box-shadow:none;}
+  #detailPinyin{font-size:56px;line-height:1.3;letter-spacing:0;color:#6c777c;}
+  #detailBody .detail-learning{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:12px;padding:4px 2px 8px 0;}
+  #detailBody .detail-learning .sec-label{padding:0;font-size:20px;line-height:28px;letter-spacing:0;color:#52636a;}
+  #detailBody .detail-learning #strokes{gap:8px;justify-content:flex-start;}
+  #detailBody .detail-learning .stroke-cell{border-radius:8px;border-color:#dde3e6;border-width:2px;box-shadow:none;}
+  #detailBody .detail-learning .stroke-num{color:#647880;font-size:12px;right:4px;bottom:2px;}
+  #detailBody .detail-learning .rad-card{background:transparent;border:0;border-top:1px solid #e5e7e8;border-radius:0;box-shadow:none;padding:12px 0 0;}
+  #detailBody .detail-learning .word-card{min-width:0;border-radius:8px;border-width:2px;box-shadow:none;padding:12px 8px;}
+  #detailBody .detail-learning .word-card .w{letter-spacing:0;font-size:26px;}
+}
+@media (max-width:899px), (orientation:portrait){
+  .detail-learning{display:contents;}
+}
+@media (max-width:600px){
+  #detailPinyin{font-size:40px;}
 }
 .page-head .brand{font-size:clamp(16px,2.2vh,20px);font-weight:800;letter-spacing:2px;color:#BB8C4F;}
 #voiceEcho{flex-shrink:0;margin:clamp(4px,.6vh,10px) 12px 0;padding:clamp(6px,1vh,10px) clamp(10px,1.5vw,14px);background:#FFF3E0;border-radius:14px;font-size:clamp(13px,1.8vh,15px);color:#8D6E63;line-height:1.6;}
@@ -229,11 +247,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
       <div id="detailChar">大</div>
       <div id="detailMeta"></div>
     </div>
-    <div class="sec-label">✏️ 笔顺（点一下看动画）</div>
-    <div id="strokes"></div>
-    <div id="radSection"></div>
-    <div class="sec-label">🔊 组词（点一下听一听）</div>
-    <div id="words"></div>
+    <div class="detail-learning">
+      <div class="sec-label">笔顺</div>
+      <div id="strokes"></div>
+      <div id="radSection"></div>
+      <div class="sec-label">组词</div>
+      <div id="words"></div>
+    </div>
   </div>
 </div>
 
@@ -700,7 +720,9 @@ function renderDetail(toneNum){
   prefetchTTS(current).catch(function(){});
   if(data.w && data.w.length){ prefetchTTSList(data.w, 3); }
   $("home").style.display = "none"; $("history").classList.remove("show"); $("results").classList.remove("show"); $("detail").classList.add("show");
-  $("detailBody").scrollTop = 0; $("strokes").innerHTML = "";
+  $("detailBody").scrollTop = 0;
+  var learning = document.querySelector(".detail-learning"); if(learning) learning.scrollTop = 0;
+  $("strokes").innerHTML = "";
   $("detailChar").textContent = current;
   var pys = Array.isArray(data.p) ? data.p : [data.p];
   if(toneNum){ var picked = pys.filter(function(p){ return detectTone(p) === toneNum; }); if(picked.length) pys = picked; }
@@ -712,7 +734,18 @@ function renderDetail(toneNum){
 function fitDetailChar(){
   var hero = document.querySelector(".char-hero"); var char = $("detailChar");
   if(!hero || !char || !hero.clientWidth) return;
-  var size = Math.max(120, Math.min(280, Math.floor((hero.clientWidth - 28) * 0.78)));
+  var size = Math.min(280, Math.floor((hero.clientWidth - 28) * 0.78));
+  var body = $("detailBody");
+  var landscapeGrid = getComputedStyle(body).display === "grid";
+  if(landscapeGrid){
+    var heroStyle = getComputedStyle(hero);
+    var fixedHeight = $("detailPinyin").getBoundingClientRect().height + $("detailMeta").getBoundingClientRect().height
+      + parseFloat(getComputedStyle($("detailPinyin")).marginBottom) + parseFloat(getComputedStyle($("detailMeta")).marginTop);
+    var availableHeight = hero.clientHeight - parseFloat(heroStyle.paddingTop) - parseFloat(heroStyle.paddingBottom)
+      - parseFloat(heroStyle.borderTopWidth) - parseFloat(heroStyle.borderBottomWidth);
+    size = Math.min(size, Math.floor((availableHeight - fixedHeight) / 1.5));
+  }
+  size = Math.max(1, size);
   char.style.fontSize = size + "px";
 }
 function renderRadical(ch){
@@ -838,13 +871,22 @@ $("resHistBtn").addEventListener("click", openHistory);
 $("histBack").addEventListener("click", function(){
   cancelSpeech();
   $("history").classList.remove("show");
-  if(histFrom === "detail"){ $("detail").classList.add("show"); }
-  else if(histFrom === "results"){ $("results").classList.add("show"); }
+  if(histFrom === "detail"){
+    $("detail").classList.add("show");
+    requestAnimationFrame(function(){
+      fitDetailChar();
+      var box = $("strokes"); fitStrokeCells(box, box.querySelectorAll(".stroke-cell").length);
+    });
+  }
+  else if(histFrom === "results"){
+    $("results").classList.add("show");
+    requestAnimationFrame(fitResultCards);
+  }
   else { $("home").style.display = "flex"; }
 });
 $("clearHistory").addEventListener("click", function(){ histList = []; saveHistory(); renderHistCount(); renderHistory(); });
 var detailFrom = "home"; // 记录从哪个页面进入详情页
-$("backBtn").addEventListener("click", function(){ cancelSpeech(); cleanups.forEach(function(t){ clearInterval(t.interval); }); cleanups=[]; $("detail").classList.remove("show"); if(detailFrom === "results"){ $("results").classList.add("show"); } else if(detailFrom === "history"){ $("history").classList.add("show"); renderHistory(); } else { $("home").style.display = "flex"; } });
+$("backBtn").addEventListener("click", function(){ cancelSpeech(); cleanups.forEach(function(t){ clearInterval(t.interval); }); cleanups=[]; $("detail").classList.remove("show"); if(detailFrom === "results"){ $("results").classList.add("show"); requestAnimationFrame(fitResultCards); } else if(detailFrom === "history"){ $("history").classList.add("show"); renderHistory(); } else { $("home").style.display = "flex"; } });
 $("detHistBtn").addEventListener("click", openHistory);
 var rec = { active:false, timer:null, startTime:0, cancelled:false, startY:0, animTimer:null, autoTimer:null, btn:null, tipTimer:null, autoMode:false, captureSeq:0 };
 // 识别等待提示语：让孩子知道"它在认真工作"，轮播缓解等待无聊
