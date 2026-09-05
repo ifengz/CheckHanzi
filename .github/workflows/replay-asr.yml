@@ -1,0 +1,22 @@
+name: 回放真实音频验证识别（手动）
+
+on:
+  workflow_dispatch:
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 回放 audio-debug 音频走识别链
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/voice_deploy_key
+          chmod 600 ~/.ssh/voice_deploy_key
+          SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
+          $SSH "$SSH_USER@$SSH_HOST" "bash -s" < .github/scripts/replay-asr.sh
