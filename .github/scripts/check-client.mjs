@@ -89,6 +89,12 @@ const runAsr = (lang = 'zh') => {
   await assert.rejects(promise, /识别服务返回错误/);
 }
 {
+  const { promise, request } = runAsr('en');
+  request.status = 422;
+  request.onload();
+  await assert.rejects(promise, error => error.code === 'silent_audio' && /没有录到声音/.test(error.message));
+}
+{
   const { promise, request } = runAsr();
   request.status = 200;
   request.responseText = '{';
@@ -113,9 +119,11 @@ const submitContext = vm.createContext({
   handleVoiceResult: text => submitEvents.push(['result', text]),
   englishLookupController: { handleRecognition: text => submitEvents.push(['english', text]) },
   cloudRecognize: () => Promise.reject(new Error('识别请求超时，请稍后重试')),
+  releaseMicStream: () => submitEvents.push(['release']),
 });
 vm.runInContext(html.slice(submitStart, submitEnd), submitContext);
-submitContext.submitRecording(new Float32Array(1600), 7);
+const quietRecording = new Float32Array(1600).fill(1 / 32768);
+submitContext.submitRecording(quietRecording, 7);
 await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(submitEvents, [
   ['state', 'recognize'],
@@ -124,13 +132,13 @@ assert.deepEqual(submitEvents, [
 ], 'current ASR failure must reset UI and show the service error');
 submitEvents.length = 0;
 submitContext.rec.captureSeq = 8;
-submitContext.submitRecording(new Float32Array(1600), 7);
+submitContext.submitRecording(quietRecording, 7);
 await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(submitEvents, [['state', 'recognize']], 'stale ASR failure must not reset current UI');
 submitEvents.length = 0;
 submitContext.rec.captureSeq = 9;
 submitContext.cloudRecognize = () => Promise.resolve('I have 2 apples.');
-submitContext.submitRecording(new Float32Array(1600), 9, 'en');
+submitContext.submitRecording(quietRecording, 9, 'en');
 await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(submitEvents, [
   ['state', 'recognize'],
@@ -142,11 +150,122 @@ submitEvents.length = 0;
 let releaseStaleEnglish;
 submitContext.rec.captureSeq = 10;
 submitContext.cloudRecognize = () => new Promise(resolve => { releaseStaleEnglish = resolve; });
-submitContext.submitRecording(new Float32Array(1600), 10, 'en');
+submitContext.submitRecording(quietRecording, 10, 'en');
 submitContext.rec.captureSeq = 11;
 releaseStaleEnglish('I should not replace the newer result.');
 await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(submitEvents, [['state', 'recognize']], 'stale English ASR must not replace a newer language or recording result');
+
+for (const invalid of [new Float32Array(1600), new Float32Array(0), quietRecording.map(() => NaN)]) {
+  submitEvents.length = 0;
+  submitContext.cloudRecognize = () => { throw new Error('Invalid capture must not reach ASR'); };
+  submitContext.submitRecording(invalid, 11, 'en');
+  assert.ok(submitEvents.some(event => event[0] === 'release'), 'invalid capture must release the microphone so the next press reacquires it');
+  assert.ok(submitEvents.some(event => event[0] === 'toast'), 'capture failure must be visible');
+}
+submitEvents.length = 0;
+submitContext.cloudRecognize = () => Promise.reject(Object.assign(new Error('没有录到声音'), { code: 'silent_audio' }));
+submitContext.submitRecording(quietRecording, 11, 'en');
+await new Promise(resolve => setImmediate(resolve));
+assert.ok(submitEvents.some(event => event[0] === 'release'), 'server silence rejection must also renew capture on the next press');
+
+const captureStart = html.indexOf('function ensureAudio(');
+const captureEnd = html.indexOf('function resample(', captureStart);
+function captureHarness(state = 'running') {
+  const streams = [], processors = [];
+  let requested = 0, resumed = 0;
+  const node = () => ({ connect() {}, disconnect() { this.disconnected = true; } });
+  const audio = {
+    state, sampleRate: 16000, destination: {},
+    async resume() { resumed++; this.state = 'running'; },
+    createMediaStreamSource: node,
+    createScriptProcessor() { const proc = node(); processors.push(proc); return proc; },
+    createGain() { return { ...node(), gain: { value: 1 } }; },
+  };
+  const capture = vm.createContext({
+    Float32Array, window: { AudioContext: function() { return audio; } },
+    navigator: { mediaDevices: { async getUserMedia() {
+      requested++;
+      const track = { readyState: 'live', enabled: true, muted: false, stop() { this.readyState = 'ended'; } };
+      const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
+      streams.push(stream);
+      return stream;
+    } } },
+  });
+  vm.runInContext(html.slice(captureStart, captureEnd), capture);
+  const feed = (proc, value) => proc.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(value) } });
+  return { capture, audio, streams, processors, feed, counts: () => ({ requested, resumed }) };
+}
+for (const broken of ['ended', 'muted', 'disabled']) {
+  const h = captureHarness();
+  const first = await h.capture.ensureMicStream();
+  assert.equal(await h.capture.ensureMicStream(), first, 'healthy warm capture must retain preroll');
+  const track = first.stream.getAudioTracks()[0];
+  if (broken === 'ended') track.stop();
+  if (broken === 'muted') track.muted = true;
+  if (broken === 'disabled') track.enabled = false;
+  const next = await h.capture.ensureMicStream();
+  assert.notEqual(next.stream, first.stream, broken + ': next recording must acquire a working stream');
+  assert.equal(track.readyState, 'ended', 'replaced stream must release hardware');
+  assert.equal(first.proc.onaudioprocess, null, 'discard stale preroll callbacks');
+  assert.equal(h.counts().requested, 2);
+}
+{
+  const h = captureHarness();
+  const acquire = h.capture.navigator.mediaDevices.getUserMedia;
+  let release, requested = 0;
+  const permission = new Promise(resolve => { release = resolve; });
+  h.capture.navigator.mediaDevices.getUserMedia = async () => { requested++; await permission; return acquire(); };
+  const first = h.capture.startRecording();
+  const second = h.capture.startRecording();
+  release();
+  const [stale, current] = await Promise.all([first, second]);
+  assert.equal(requested, 1, 'cancel and repress during permission must share one hardware request');
+  stale.stop();
+  h.feed(current.proc, 0.1);
+  assert.ok(current.stop().some(value => value !== 0), 'discarding a stale capture must preserve the current recording');
+  h.capture.releaseMicStream();
+  assert.ok(h.streams.every(stream => stream.getTracks().every(track => track.readyState === 'ended')), 'no orphan microphone stream may survive cleanup');
+}
+{
+  const h = captureHarness('interrupted');
+  await h.capture.startRecording();
+  assert.equal(h.audio.state, 'running', 'iPad interruption must be resumed before recording starts');
+  assert.ok(h.counts().resumed > 0);
+}
+{
+  const h = captureHarness('suspended');
+  let resume;
+  h.audio.resume = () => new Promise(resolve => { resume = () => { h.audio.state = 'running'; resolve(); }; });
+  const pending = h.capture.startRecording();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.processors.length, 0, 'capture must wait until resume completes');
+  resume();
+  const recorder = await pending;
+  h.feed(recorder.proc, 1 / 32768);
+  assert.ok(recorder.stop().some(value => value !== 0), 'preserve quiet valid microphone input');
+}
+{
+  const h = captureHarness();
+  const warm = await h.capture.ensureMicStream();
+  h.feed(warm.proc, 0.1);
+  const recorder = await h.capture.startRecording();
+  h.feed(recorder.proc, 0);
+  assert.ok(recorder.stop().every(value => value === 0), 'stale preroll alone cannot turn a silent capture into a previous word');
+}
+{
+  const h = captureHarness('suspended');
+  h.audio.resume = async () => { throw new Error('resume denied'); };
+  await assert.rejects(h.capture.startRecording(), /resume denied/);
+  assert.equal(h.counts().requested, 0, 'failed resume must not start a misleading silent recording');
+}
+{
+  const h = captureHarness();
+  let requests = 0;
+  h.capture.navigator.mediaDevices.getUserMedia = async () => { requests++; throw new Error('permission denied'); };
+  await assert.rejects(h.capture.startRecording(), /permission denied/);
+  assert.equal(requests, 1, 'permission failure must be surfaced without a hidden second request');
+}
 
 const waveStart = html.indexOf('function startWave(');
 const waveEnd = html.indexOf('function stopWave(', waveStart);

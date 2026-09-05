@@ -3,11 +3,13 @@
 
 import asyncio
 import importlib.util
+import io
 import pathlib
 import os
 import sys
 import tempfile
 import unittest
+import wave
 from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -21,6 +23,16 @@ os.environ["TTS_CACHE_DIR"] = TEST_CACHE.name
 SPEC = importlib.util.spec_from_file_location("server_voice", ROOT / "server-voice.py")
 server_voice = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(server_voice)
+
+
+def recording(sample):
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(sample.to_bytes(2, "little", signed=True) * 3200)
+    return output.getvalue()
 
 
 class VoiceBackendContractTest(unittest.TestCase):
@@ -41,15 +53,34 @@ class VoiceBackendContractTest(unittest.TestCase):
             self.assertEqual(result, ("I like a book.", "sensevoice-en", 1.0))
 
     def test_multipart_language_reaches_recognizer(self):
-        import io
         with patch.object(server_voice, "recognize", return_value=("a", "sensevoice-en", 1)) as recognize, \
              patch.object(server_voice.os, "makedirs", side_effect=OSError("No debug recording in tests")):
             response = server_voice.app.test_client().post("/api/asr", data={
-                "file": (io.BytesIO(b"audio" * 300), "audio.wav"), "lang": "en",
+                "file": (io.BytesIO(recording(1)), "audio.wav"), "lang": "en",
             })
             self.assertEqual(response.status_code, 200)
             self.assertEqual(recognize.call_args.args[1], "en")
             self.assertEqual(response.json["text"], "a")
+
+    def test_zero_pcm_never_reaches_a_recognizer(self):
+        with patch.object(server_voice, "recognize", return_value=("I.", "sensevoice-en", 1)) as recognize, \
+             patch.object(server_voice.os, "makedirs", side_effect=OSError("No debug recording in tests")):
+            for lang in ("en", "zh"):
+                response = server_voice.app.test_client().post(
+                    "/api/asr?lang=" + lang, data=recording(0), content_type="audio/wav",
+                )
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json["code"], "silent_audio")
+                self.assertNotIn("text", response.json)
+            recognize.assert_not_called()
+
+    def test_invalid_wav_never_reaches_a_recognizer(self):
+        with patch.object(server_voice, "recognize") as recognize:
+            response = server_voice.app.test_client().post(
+                "/api/asr?lang=en", data=b"invalid" * 200, content_type="audio/wav",
+            )
+            self.assertEqual(response.status_code, 400)
+            recognize.assert_not_called()
 
     def test_invalid_language_rejected_without_tts_generation(self):
         response = server_voice.app.test_client().get("/api/tts?text=apple&lang=fr")

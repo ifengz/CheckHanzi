@@ -526,37 +526,58 @@ var audioCtx = null; var recorder = null;
 // ── 麦克风常驻流 + 前置环形缓冲：消除 getUserMedia 冷启动延迟吞句首字的问题 ──
 // 孩子按下按钮才 getUserMedia 时，iPad 首次要 200-800ms，开头语音直接没了（"少字"主因）。
 // 方案：授权一次后流常驻，后台持续写最近 0.35s 到环形缓冲；正式录音 = 前置缓冲 + 按下之后的段。
-var micWarm = null;            // {stream, src, proc} 常驻
+var micWarm = null;            // {stream, src, proc, mute} 常驻
 var preroll = null;            // {buf, w, filled} buf 长度按实际采样率 1 秒，创建时定
 var PREROLL_MS = 350;          // 实际拼接的前置时长
-function ensureMicStream(){
-  return new Promise(function(resolve){
-    if(micWarm){ resolve(micWarm); return; }
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ resolve(null); return; }
-    ensureAudio();
-    navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:true, noiseSuppression:true}})
-      .then(function(stream){
-        try{
-          var src = audioCtx.createMediaStreamSource(stream);
-          var proc = audioCtx.createScriptProcessor(2048, 1, 1);
-          // buf = 1 秒（按设备真实采样率，Mac 48k / iPad 16k 或 48k）
-          preroll = { buf: new Float32Array(audioCtx.sampleRate || 16000), w: 0, filled: 0 };
-          proc.onaudioprocess = function(ev){
-            if(window.__prerollPaused) return; // TTS 播报中，不写入（防播报声进前置缓冲）
-            var d = ev.inputBuffer.getChannelData(0);
-            for(var i=0;i<d.length;i++){ preroll.buf[preroll.w] = d[i]; preroll.w = (preroll.w+1) % preroll.buf.length; }
-            if(preroll.filled < preroll.buf.length) preroll.filled += d.length;
-          };
-          // 必须接一个静音增益节点：ScriptProcessor 不连 destination 就不会被驱动，
-          // 但直接连 destination 会把麦克风声音送到扬声器 → 回声循环污染识别（重复字幻听）
-          var mute = audioCtx.createGain(); mute.gain.value = 0;
-          src.connect(proc); proc.connect(mute); mute.connect(audioCtx.destination);
-          micWarm = { stream: stream, src: src, proc: proc };
-          resolve(micWarm);
-        }catch(e){ try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e2){} resolve(null); }
-      }).catch(function(){ resolve(null); }); // 静默失败：等首次用户手势再试
-  });
+function isMicStreamUsable(stream){
+  return stream.getAudioTracks().some(function(track){ return track.readyState === "live" && track.enabled && !track.muted; });
 }
+function releaseMicStream(){
+  var warm = micWarm; micWarm = null; preroll = null;
+  if(!warm) return;
+  warm.proc.onaudioprocess = null;
+  [warm.src, warm.proc, warm.mute].forEach(function(node){ node.disconnect(); });
+  warm.stream.getTracks().forEach(function(track){ track.stop(); });
+}
+var ensureMicStream = (function(){
+  var pending = null;
+  async function acquire(){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("浏览器不支持麦克风");
+    if(!audioCtx || audioCtx.state === "closed"){
+      releaseMicStream();
+      audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    }
+    if(audioCtx.state !== "running") await audioCtx.resume();
+    if(audioCtx.state !== "running") throw new Error("麦克风未就绪，请再按一次");
+    if(micWarm && isMicStreamUsable(micWarm.stream)) return micWarm;
+    releaseMicStream();
+    var stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:true, noiseSuppression:true}});
+    try{
+      var src = audioCtx.createMediaStreamSource(stream);
+      var proc = audioCtx.createScriptProcessor(2048, 1, 1);
+      var buffer = { buf: new Float32Array(audioCtx.sampleRate || 16000), w: 0, filled: 0 };
+      proc.onaudioprocess = function(ev){
+        if(window.__prerollPaused) return;
+        var d = ev.inputBuffer.getChannelData(0);
+        for(var i=0;i<d.length;i++){ buffer.buf[buffer.w] = d[i]; buffer.w = (buffer.w+1) % buffer.buf.length; }
+        buffer.filled = Math.min(buffer.buf.length, buffer.filled + d.length);
+      };
+      var mute = audioCtx.createGain(); mute.gain.value = 0;
+      src.connect(proc); proc.connect(mute); mute.connect(audioCtx.destination);
+      preroll = buffer;
+      micWarm = { stream: stream, src: src, proc: proc, mute: mute };
+      return micWarm;
+    }catch(error){
+      [src, proc, mute].filter(Boolean).forEach(function(node){ node.disconnect(); });
+      stream.getTracks().forEach(function(track){ track.stop(); });
+      throw error;
+    }
+  }
+  return function(){
+    if(!pending) pending = acquire().finally(function(){ pending = null; });
+    return pending;
+  };
+})();
 function takePrerollBefore(startW){
   // 取【按下按钮之前】的 PREROLL_MS 毫秒：(startW - n, startW] 区间，绝不包含按下之后的数据
   if(!audioCtx || !preroll || preroll.filled <= 0) return new Float32Array(0);
@@ -567,47 +588,39 @@ function takePrerollBefore(startW){
   for(var i=0;i<n;i++){ out[i] = preroll.buf[(startW - n + i + preroll.buf.length*2) % preroll.buf.length]; }
   return out;
 }
-function startRecording(){
-  return new Promise(function(resolve, reject){
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ reject(new Error("浏览器不支持麦克风")); return; }
-    ensureAudio();
-    var build = function(stream, warm){
-      try{ var ctx = audioCtx; var src = ctx.createMediaStreamSource(stream);
-        var proc = ctx.createScriptProcessor(4096, 1, 1); var chunks = [];
-        // 按下瞬间就【拷贝】前置缓冲数据（不只记指针）：环形缓冲只有 1 秒且录音期间持续被覆盖，
-        // 若等到松手再取，(startW-350ms, startW] 的物理位置早被自己正在说的话重写 → "天呐"变"天呐天呐"
-        var headSnap = (warm && preroll && preroll.filled > 0 && !window.__prerollPaused)
-          ? takePrerollBefore(preroll.w) : new Float32Array(0);
-        proc.onaudioprocess = function(ev){ chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
-        src.connect(proc); proc.connect(ctx.destination);
-        var stopped = false;
-        recorder = { stream, src, proc, chunks,
-          stop: function(){
-            if(stopped) return new Float32Array(0);
-            stopped = true;
-            // 前置缓冲快照（按下瞬间拷贝的 350ms）+ 正式段；不再关闭常驻流
-            var head = headSnap;
-            var total = head.length + chunks.reduce(function(a,c){ return a+c.length; },0);
-            var all = new Float32Array(total); var off=0;
-            all.set(head, off); off += head.length;
-            for(var i=0;i<chunks.length;i++){ all.set(chunks[i],off); off+=chunks[i].length; }
-            proc.onaudioprocess = null;
-            try{ src.disconnect(); }catch(e){}
-            try{ proc.disconnect(); }catch(e){}
-            if(!warm){ try{ src.disconnect(); }catch(e){} try{ proc.disconnect(); }catch(e){} stream.getTracks().forEach(function(t){ t.stop(); }); }
-            if(recorder && recorder.stream === stream && recorder.src === src) recorder = null;
-            return all;
-          }
-        }; resolve(recorder);
-      }catch(e){ if(!warm){ stream.getTracks().forEach(function(t){ t.stop(); }); } reject(e); }
+async function startRecording(){
+  var warm = await ensureMicStream();
+  var stream = warm.stream;
+  try{
+    var ctx = audioCtx; var src = ctx.createMediaStreamSource(stream);
+    var proc = ctx.createScriptProcessor(4096, 1, 1); var chunks = [];
+    // 开始时拷贝前置缓冲，避免录音期间环形缓冲被覆盖后重复拼入本次语音。
+    var headSnap = (preroll && preroll.filled > 0 && !window.__prerollPaused)
+      ? takePrerollBefore(preroll.w) : new Float32Array(0);
+    proc.onaudioprocess = function(ev){ chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
+    src.connect(proc); proc.connect(ctx.destination);
+    var stopped = false;
+    recorder = { stream, src, proc, chunks,
+      stop: function(){
+        if(stopped) return new Float32Array(0);
+        stopped = true;
+        var total = headSnap.length + chunks.reduce(function(a,c){ return a+c.length; },0);
+        var all = new Float32Array(total); var off = headSnap.length;
+        all.set(headSnap);
+        for(var i=0;i<chunks.length;i++){ all.set(chunks[i],off); off+=chunks[i].length; }
+        proc.onaudioprocess = null;
+        src.disconnect(); proc.disconnect();
+        if(recorder && recorder.stream === stream && recorder.src === src) recorder = null;
+        // 前置缓冲不能掩盖本次麦克风失效或全静音。
+        if(ctx.state !== "running" || !isMicStreamUsable(stream) || !chunks.some(function(chunk){ return chunk.some(function(value){ return value !== 0; }); })) return new Float32Array(0);
+        return all;
+      }
     };
-    ensureMicStream().then(function(warm){
-      if(warm){ build(warm.stream, true); return; } // 常驻流：秒开，带前置缓冲
-      navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:true, noiseSuppression:true}})
-        .then(function(stream){ build(stream, false); })
-        .catch(function(e){ reject(new Error("无法访问麦克风："+e.message)); });
-    });
-  });
+    return recorder;
+  }catch(e){
+    [src, proc].filter(Boolean).forEach(function(node){ node.disconnect(); });
+    releaseMicStream(); throw e;
+  }
 }
 function resample(samples, fromRate, toRate){
   if(fromRate === toRate || !samples || samples.length === 0) return samples;
@@ -666,6 +679,7 @@ function cloudRecognize(samples, lang){
     var x = new XMLHttpRequest(); x.open("POST","/api/asr",true); x.timeout=15000; x.responseType="text";
     var fd = new FormData(); fd.append("file", floatToWav(down, 16000), "audio.wav"); fd.append("lang", lang);
     x.onload = function(){
+      if(x.status === 422){ reject(Object.assign(new Error("没有录到声音，请再按一次说话"), {code:"silent_audio"})); return; }
       if(x.status !== 200){ reject(new Error("识别服务返回错误，请稍后重试（HTTP " + x.status + "）")); return; }
       var d;
       try{ d = JSON.parse(x.responseText); }catch(e){ reject(new Error("识别服务返回格式错误，请稍后重试")); return; }
@@ -1220,6 +1234,9 @@ function cancelAutoRec(){
 }
 function submitRecording(samples, seq, lang){
   lang = lang === "en" ? "en" : "zh";
+  if(!samples.length || !samples.every(Number.isFinite) || !samples.some(function(value){ return value !== 0; })){
+    releaseMicStream(); setRecState("off"); toast("没有录到声音，请再按一次说话"); return;
+  }
   if(samples.length < 1600){ setRecState("off"); toast("没听到声音，请再试一次"); return; }
   setRecState("recognize");
   cloudRecognize(samples, lang).then(function(text){
@@ -1231,6 +1248,7 @@ function submitRecording(samples, seq, lang){
     } else toast("没听清，再按一次试试");
   }).catch(function(err){
     if(seq !== rec.captureSeq) return;
+    if(err && err.code === "silent_audio") releaseMicStream();
     setRecState("off");
     toast(err && err.message ? err.message : "识别失败，请稍后重试");
   });
@@ -1252,7 +1270,7 @@ function startHold(){
   cancelSpeech();
   var seq = ++rec.captureSeq;
   rec.language = lookupLanguage;
-  rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.startTime = Date.now(); ensureAudio();
+  rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.startTime = Date.now();
   if(rec.btn) rec.btn.classList.add("holding"); setRecState("listen");
   startRecording().then(function(recorderObj){
     if(seq !== rec.captureSeq || (!rec.active && !rec.autoMode)){ try{ recorderObj.stop(); }catch(e){} return; }
@@ -1261,7 +1279,7 @@ function startHold(){
     rec.timeoutTimer = setTimeout(function(){ if(rec.active && seq === rec.captureSeq) endHold(true); }, 12000);
   }).catch(function(err){
     if(seq !== rec.captureSeq) return;
-    if(!rec.active) return; rec.active = false; clearTimeout(rec.timer); stopWave();
+    if(!rec.active) return; rec.active = false; rec.autoMode = false; clearTimeout(rec.timer); stopWave();
     if(rec.btn) rec.btn.classList.remove("holding"); setRecState("off"); toast(err.message || "无法使用麦克风");
   });
 }

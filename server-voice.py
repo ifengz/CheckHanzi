@@ -428,6 +428,12 @@ def asr_handler():
         lang = voice_audio.parse_language(request.form.get("lang", request.args.get("lang", "zh")))
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
+    try:
+        samples, _ = wav_bytes_to_samples(audio_data)
+    except (wave.Error, EOFError, ValueError):
+        return jsonify({"error": "音频格式无效，请重新录音"}), 400
+    if not np.any(samples):
+        return jsonify({"error": "没有录到声音，请再按一次说话", "code": "silent_audio"}), 422
     # 音频留存（诊断用）：最近 10 条，覆盖式，排查"识别不准"时把真实上传音频拉下来分析
     try:
         import glob as _glob
