@@ -19,17 +19,8 @@ except ImportError as e:
 
 APP_ID = os.environ["XFYUN_APP_ID"]; KEY = os.environ["XFYUN_API_KEY"]; SECRET = os.environ["XFYUN_API_SECRET"]
 
-def xfyun(wav_bytes, language, accent):
-    with wave.open(io.BytesIO(wav_bytes)) as w:
-        sr = w.getframerate()
-        raw = w.readframes(w.getnframes())
-    x = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32767.0
-    if sr != 16000:
-        n = int(len(x) * 16000 / sr)
-        xo = np.linspace(0, 1, len(x), endpoint=False); xn = np.linspace(0, 1, n, endpoint=False)
-        x = np.interp(xn, xo, x).astype(np.float32)
-    pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16).tobytes()
-    chunks = [pcm[i:i+1280] for i in range(0, len(pcm), 1280)]
+def xfyun(audio_bytes, language, accent, encoding="lame", sample_rate=16000):
+    chunks = [audio_bytes[i:i+1280] for i in range(0, len(audio_bytes), 1280)]
     date = formatdate(usegmt=True)
     origin = "host: iat.xf-yun.com" + chr(10) + "date: " + date + chr(10) + "GET /v1 HTTP/1.1"
     sig = base64.b64encode(hmac.new(SECRET.encode(), origin.encode(), hashlib.sha256).digest()).decode()
@@ -43,12 +34,12 @@ def xfyun(wav_bytes, language, accent):
             if i == 0:
                 f["parameter"] = {"iat": {"domain": "slm", "language": language, "accent": accent, "eos": 6000,
                                           "result": {"encoding": "utf8", "compress": "raw", "format": "json"}}}
-            f["payload"] = {"audio": {"encoding": "raw", "sample_rate": 16000, "channels": 1, "bit_depth": 16,
+            f["payload"] = {"audio": {"encoding": encoding, "sample_rate": sample_rate, "channels": 1,
                                       "seq": i+1, "status": 0 if i == 0 else 1, "audio": base64.b64encode(c).decode()}}
             ws.send(json.dumps(f))
         ws.send(json.dumps({"header": {"app_id": APP_ID, "status": 2},
-                            "payload": {"audio": {"encoding": "raw", "sample_rate": 16000, "channels": 1,
-                                                  "bit_depth": 16, "seq": len(chunks)+1, "status": 2, "audio": ""}}}))
+                            "payload": {"audio": {"encoding": encoding, "sample_rate": sample_rate, "channels": 1,
+                                                  "seq": len(chunks)+1, "status": 2, "audio": ""}}}))
         for _ in range(len(chunks) + 20):
             try:
                 resp = json.loads(ws.recv())
@@ -84,12 +75,8 @@ for wtext in words:
                 chunks.append(ch["data"])
         open(path, "wb").write(b"".join(chunks))
     asyncio.run(gen(mp3))
-    wavp = os.path.join(d, wtext + ".wav")
-    r = subprocess.run(["ffmpeg", "-y", "-i", mp3, "-ar", "16000", "-ac", "1", wavp], capture_output=True)
-    if r.returncode != 0:
-        print(f"{wtext}: ffmpeg 不可用，跳过"); continue
-    wav = open(wavp, "rb").read()
-    zh = xfyun(wav, "zh_cn", "mandarin")
-    en = xfyun(wav, "en_us", "american")
+    audio = open(mp3, "rb").read()
+    zh = xfyun(audio, "zh_cn", "mandarin", "lame")
+    en = xfyun(audio, "en_us", "american", "lame")
     print(f"{wtext:8s} zh_cn -> {zh!r:22s} en_us -> {en!r}")
 PYEOF
