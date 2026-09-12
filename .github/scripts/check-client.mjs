@@ -260,6 +260,41 @@ for (const broken of ['ended', 'muted', 'disabled']) {
   assert.equal(h.counts().requested, 0, 'failed resume must not start a misleading silent recording');
 }
 {
+  let resolveRecording;
+  const holdEvents = [];
+  const recorder = { stop: () => Float32Array.from([0.1, 0.2]) };
+  const holdContext = vm.createContext({
+    Date,
+    Promise,
+    rec: {
+      active: false, autoMode: false, cancelled: false, captureSeq: 0,
+      btn: { id: 'recBtn', classList: { add() {}, remove() {} } },
+    },
+    cloudASR: true,
+    lookupLanguage: 'zh',
+    cancelSpeech() {},
+    setRecState: mode => holdEvents.push(['state', mode]),
+    stopWave() {},
+    clearTimeout() {},
+    setTimeout: () => 1,
+    toast: message => holdEvents.push(['toast', message]),
+    startRecording: () => new Promise(resolve => { resolveRecording = resolve; }),
+    submitRecording: (samples, seq, lang) => holdEvents.push(['submit', samples.length, seq, lang]),
+    scheduleAutoCapture() {},
+  });
+  const holdStart = html.indexOf('function startHold(');
+  const holdEnd = html.indexOf('function startWave(', holdStart);
+  vm.runInContext(html.slice(holdStart, holdEnd), holdContext);
+  holdContext.startHold();
+  holdContext.rec.startTime = Date.now() - 1000;
+  holdContext.endHold();
+  assert.equal(holdContext.rec.releasePending, true, 'early release must wait for microphone initialization');
+  assert.deepEqual(holdEvents.filter(event => event[0] === 'toast'), [], 'early release must not report a false silent capture');
+  resolveRecording(recorder);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(holdEvents.filter(event => event[0] === 'submit'), [['submit', 2, 1, 'zh']], 'ready recorder must submit after early release');
+}
+{
   const h = captureHarness();
   let requests = 0;
   h.capture.navigator.mediaDevices.getUserMedia = async () => { requests++; throw new Error('permission denied'); };

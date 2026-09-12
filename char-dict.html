@@ -1270,16 +1270,22 @@ function startHold(){
   cancelSpeech();
   var seq = ++rec.captureSeq;
   rec.language = lookupLanguage;
-  rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.startTime = Date.now();
+  rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.releasePending = false; rec.startTime = Date.now();
   if(rec.btn) rec.btn.classList.add("holding"); setRecState("listen");
   startRecording().then(function(recorderObj){
-    if(seq !== rec.captureSeq || (!rec.active && !rec.autoMode)){ try{ recorderObj.stop(); }catch(e){} return; }
+    if(seq !== rec.captureSeq || (!rec.active && !rec.autoMode && !rec.releasePending)){ try{ recorderObj.stop(); }catch(e){} return; }
     rec.recorderObj = recorderObj; rec.recStarted = Date.now();
+    if(rec.releasePending){
+      rec.releasePending = false; rec.recorderObj = null;
+      submitRecording(recorderObj.stop(), rec.captureSeq, rec.language);
+      return;
+    }
     if(rec.autoMode){ scheduleAutoCapture(); return; }
     rec.timeoutTimer = setTimeout(function(){ if(rec.active && seq === rec.captureSeq) endHold(true); }, 12000);
   }).catch(function(err){
     if(seq !== rec.captureSeq) return;
-    if(!rec.active) return; rec.active = false; rec.autoMode = false; clearTimeout(rec.timer); stopWave();
+    if(!rec.active && !rec.releasePending) return;
+    rec.releasePending = false; rec.active = false; rec.autoMode = false; clearTimeout(rec.timer); stopWave();
     if(rec.btn) rec.btn.classList.remove("holding"); setRecState("off"); toast(err.message || "无法使用麦克风");
   });
 }
@@ -1304,7 +1310,11 @@ function endHold(autoStop){
   rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
   if(cancelled){ if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} } rec.recorderObj = null; return; }
   var recorderObj = rec.recorderObj; rec.recorderObj = null;
-  if(!recorderObj){ toast("没听到声音，请再试一次"); return; }
+  if(!recorderObj){
+    // 权限/设备启动尚未完成时，等录音器就绪再结束本次录音，避免误报“没听到声音”。
+    rec.releasePending = true;
+    return;
+  }
   submitRecording(recorderObj.stop(), rec.captureSeq, rec.language);
 }
 function startWave(){
