@@ -16,6 +16,7 @@ for (const [name, source] of [['english-lookup.js', englishScript], ['lucide-ico
 }
 assert.doesNotMatch(html, /<input\b/i, 'voice-only lookup must not retain an input element');
 assert.doesNotMatch(englishScript, /config\.input|english-submit|searchInput/, 'English lookup must not depend on typed entry');
+assert.match(html, /#recBtn\{[^}]*touch-action:none/, 'record button must reserve touch gestures for recording');
 
 const start = html.indexOf('function resample(');
 const end = html.indexOf('function floatToWav(', start);
@@ -172,7 +173,7 @@ assert.ok(submitEvents.some(event => event[0] === 'release'), 'server silence re
 const captureStart = html.indexOf('function ensureAudio(');
 const captureEnd = html.indexOf('function resample(', captureStart);
 function captureHarness(state = 'running') {
-  const streams = [], processors = [];
+  const streams = [], processors = [], constraints = [];
   let requested = 0, resumed = 0;
   const node = () => ({ connect() {}, disconnect() { this.disconnected = true; } });
   const audio = {
@@ -184,8 +185,9 @@ function captureHarness(state = 'running') {
   };
   const capture = vm.createContext({
     Float32Array, window: { AudioContext: function() { return audio; } },
-    navigator: { mediaDevices: { async getUserMedia() {
+    navigator: { mediaDevices: { async getUserMedia(options) {
       requested++;
+      constraints.push(options);
       const track = { readyState: 'live', enabled: true, muted: false, stop() { this.readyState = 'ended'; } };
       const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
       streams.push(stream);
@@ -194,7 +196,13 @@ function captureHarness(state = 'running') {
   });
   vm.runInContext(html.slice(captureStart, captureEnd), capture);
   const feed = (proc, value) => proc.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(value) } });
-  return { capture, audio, streams, processors, feed, counts: () => ({ requested, resumed }) };
+  return { capture, audio, streams, processors, constraints, feed, counts: () => ({ requested, resumed }) };
+}
+{
+  const h = captureHarness();
+  await h.capture.ensureMicStream();
+  assert.equal(h.constraints[0].audio.autoGainControl.ideal, true, 'microphone capture must request automatic gain for distant speech');
+  assert.equal(h.constraints[0].audio.noiseSuppression.ideal, false, 'microphone capture must not suppress quiet child speech');
 }
 for (const broken of ['ended', 'muted', 'disabled']) {
   const h = captureHarness();
@@ -250,6 +258,7 @@ for (const broken of ['ended', 'muted', 'disabled']) {
   const warm = await h.capture.ensureMicStream();
   h.feed(warm.proc, 0.1);
   const recorder = await h.capture.startRecording();
+  assert.equal(recorder.mute.gain.value, 0, 'recording monitor must stay muted to avoid echo suppression of quiet speech');
   h.feed(recorder.proc, 0);
   assert.ok(recorder.stop().every(value => value === 0), 'stale preroll alone cannot turn a silent capture into a previous word');
 }
@@ -318,9 +327,11 @@ assert.equal(clearedWaveTimer, 11, 'starting the wave must clear the previous in
 const bindStart = html.indexOf('function bindRecButton(');
 const bindEnd = html.indexOf('\nbindRecButton($("recBtn"))', bindStart);
 const listeners = {};
+const moveModes = [];
 const bindContext = vm.createContext({
-  rec: { autoMode: false, active: true, cancelled: false },
+  rec: { autoMode: false, active: true, cancelled: false, startY: 100 },
   cancelAutoRec: () => { throw new Error('auto capture should not be used'); },
+  setRecState: mode => moveModes.push(mode),
   endHold: () => { assert.equal(bindContext.rec.cancelled, true, 'pointercancel must mark the capture cancelled'); },
 });
 vm.runInContext(html.slice(bindStart, bindEnd), bindContext);
@@ -328,6 +339,8 @@ bindContext.bindRecButton({
   addEventListener: (name, handler) => { listeners[name] = handler; },
 });
 listeners.pointercancel({ preventDefault() {} });
+assert.equal(listeners.pointermove, undefined, 'ordinary finger movement must not cancel an active recording');
+assert.deepEqual(moveModes, [], 'ordinary finger movement must not cancel an active recording');
 
 const languageStart = html.indexOf('function setLookupLanguage(');
 const languageEnd = html.indexOf('window.addEventListener("english-lookup-ready"', languageStart);

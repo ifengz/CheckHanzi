@@ -127,8 +127,7 @@ def samples_to_wav_bytes(samples, sr) -> bytes:
     return out.getvalue()
 
 def normalize_wav(wav_bytes: bytes) -> bytes:
-    """儿童说话音量小且忽大忽小：峰值归一到 0.9（增益上限 4x，防把底噪放大）。
-    日志实测 0.5~1s 短音频大量空结果，主因就是音量低于引擎灵敏度阈值"""
+    """儿童离设备较远时提升有效语音，保留真正静音并限制底噪放大。"""
     try:
         samples, sr = wav_bytes_to_samples(wav_bytes)
     except Exception:
@@ -136,9 +135,9 @@ def normalize_wav(wav_bytes: bytes) -> bytes:
     if not samples.size:
         return wav_bytes
     peak = float(np.max(np.abs(samples)))
-    if peak < 0.02 or peak >= 0.9:   # 纯底噪不放大；本来就够响不动
+    if peak < 0.003 or peak >= 0.9:   # 极低电平通常是底噪；本来就够响不动
         return wav_bytes
-    gain = min(0.9 / peak, 4.0)
+    gain = min(0.9 / peak, 8.0)
     return samples_to_wav_bytes(samples * gain, sr)
 
 # ── 讯飞语音听写（商业引擎，可选）──────────────────────────────

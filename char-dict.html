@@ -21,7 +21,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #lookupWorkspace > #results.show,#lookupWorkspace > #detail.show,#lookupWorkspace > #history.show{display:flex;}
 .home-brand{font-size:clamp(18px,2.4vh,26px);font-weight:800;letter-spacing:0;color:#BB8C4F;display:flex;align-items:center;gap:clamp(6px,1vh,10px);flex-shrink:0;}
 .home-brand .logo{width:clamp(36px,5vh,56px);height:clamp(36px,5vh,56px);border-radius:clamp(12px,1.5vh,16px);background:linear-gradient(135deg,#FF7A00,#FF9D3C);display:flex;align-items:center;justify-content:center;font-size:clamp(20px,3vh,30px);font-weight:800;color:#fff;}
-#recBtn{width:210px;height:210px;border-radius:50%;border:0;background:linear-gradient(135deg,#FF7A00,#FF9D3C);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;cursor:pointer;position:relative;flex-shrink:0;box-shadow:0 8px 30px rgba(255,122,0,.3),inset 0 -4px 8px rgba(0,0,0,.08);animation:breath 3s ease-in-out infinite;}
+#recBtn{width:210px;height:210px;border-radius:50%;border:0;background:linear-gradient(135deg,#FF7A00,#FF9D3C);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;cursor:pointer;position:relative;flex-shrink:0;touch-action:none;-webkit-user-select:none;user-select:none;box-shadow:0 8px 30px rgba(255,122,0,.3),inset 0 -4px 8px rgba(0,0,0,.08);animation:breath 3s ease-in-out infinite;}
 #recBtn .mic{font-size:clamp(50px,8vh,90px);line-height:1;margin-bottom:2px;}
 #recBtn .mic svg{width:88px;height:88px;stroke-width:1.8;}
 #recBtn .hint{font-size:clamp(16px,2.4vh,24px);font-weight:700;letter-spacing:2px;opacity:.9;}
@@ -101,13 +101,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .page-head{display:flex;align-items:center;justify-content:space-between;padding:clamp(6px,.8vh,12px) clamp(10px,2vw,16px);min-height:clamp(44px,6vh,60px);flex-shrink:0;margin:clamp(4px,.6vh,8px) clamp(6px,1.2vw,12px);background:#FFFAF5;border-radius:clamp(14px,2vh,24px);box-shadow:0 2px 8px rgba(0,0,0,.04);}
 .page-head button{font-size:clamp(16px,2.2vh,20px);border:0;border-radius:18px;padding:clamp(8px,1.5vh,12px) clamp(14px,2vw,22px);font-weight:700;background:#FFEED6;color:#2D2A26;min-height:clamp(40px,5vh,52px);}
 .page-head .head-actions{display:flex;align-items:center;gap:clamp(4px,.8vh,8px);}
-.page-head button.head-mic{background:linear-gradient(135deg,#FF7A00,#FF9D3C);color:#fff;box-shadow:0 4px 14px rgba(255,122,0,.3);}
-.page-head button.center-mic{font-size:clamp(17px,2.4vh,22px);padding:clamp(8px,1.4vh,12px) clamp(16px,2.5vw,26px);border-radius:clamp(18px,3vh,28px);min-height:clamp(44px,5.6vh,56px);}
+.page-head button.head-mic{background:linear-gradient(135deg,#FF7A00,#FF9D3C);color:#fff;touch-action:none;-webkit-user-select:none;user-select:none;box-shadow:0 4px 14px rgba(255,122,0,.3);}
+.page-head button.center-mic{font-size:clamp(17px,2.4vh,22px);padding:clamp(8px,1.4vh,12px) clamp(16px,2.5vw,26px);border-radius:clamp(18px,3vh,28px);min-height:clamp(44px,5.6vh,56px);touch-action:none;-webkit-user-select:none;user-select:none;}
 .page-head button.head-mic.holding{background:linear-gradient(135deg,#FF5A5F,#FF7A7A);transform:scale(.95);}
 /* 历史按钮：各页面统一 */
 .page-head button.hist-btn{background:#FFEED6;color:#2D2A26;font-size:clamp(17px,2.4vh,21px);}
 /* 结果页底部说话按钮 */
-.res-speak{width:100%;max-width:300px;margin:0 auto clamp(8px,1.2vh,14px);padding:clamp(10px,1.8vh,16px);border:0;border-radius:16px;background:linear-gradient(135deg,#FF7A00,#FF9D3C);color:#fff;font-size:clamp(18px,2.6vh,24px);font-weight:700;letter-spacing:2px;cursor:pointer;flex-shrink:0;box-shadow:0 4px 16px rgba(255,122,0,.3);}
+.res-speak{width:100%;max-width:300px;margin:0 auto clamp(8px,1.2vh,14px);padding:clamp(10px,1.8vh,16px);border:0;border-radius:16px;background:linear-gradient(135deg,#FF7A00,#FF9D3C);color:#fff;font-size:clamp(18px,2.6vh,24px);font-weight:700;letter-spacing:2px;cursor:pointer;flex-shrink:0;touch-action:none;-webkit-user-select:none;user-select:none;box-shadow:0 4px 16px rgba(255,122,0,.3);}
 .res-speak.holding{background:linear-gradient(135deg,#FF5A5F,#FF7A7A);transform:scale(.95);}
 /* 横屏（窄高度）结果页更紧凑，14个候选也能一屏放下 */
 @media(orientation:landscape){
@@ -551,7 +551,7 @@ var ensureMicStream = (function(){
     if(audioCtx.state !== "running") throw new Error("麦克风未就绪，请再按一次");
     if(micWarm && isMicStreamUsable(micWarm.stream)) return micWarm;
     releaseMicStream();
-    var stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:true, noiseSuppression:true}});
+    var stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:{ideal:true}, noiseSuppression:{ideal:false}, autoGainControl:{ideal:true}}});
     try{
       var src = audioCtx.createMediaStreamSource(stream);
       var proc = audioCtx.createScriptProcessor(2048, 1, 1);
@@ -593,14 +593,14 @@ async function startRecording(){
   var stream = warm.stream;
   try{
     var ctx = audioCtx; var src = ctx.createMediaStreamSource(stream);
-    var proc = ctx.createScriptProcessor(4096, 1, 1); var chunks = [];
+    var proc = ctx.createScriptProcessor(4096, 1, 1); var mute = ctx.createGain(); mute.gain.value = 0; var chunks = [];
     // 开始时拷贝前置缓冲，避免录音期间环形缓冲被覆盖后重复拼入本次语音。
     var headSnap = (preroll && preroll.filled > 0 && !window.__prerollPaused)
       ? takePrerollBefore(preroll.w) : new Float32Array(0);
     proc.onaudioprocess = function(ev){ chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
-    src.connect(proc); proc.connect(ctx.destination);
+    src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
     var stopped = false;
-    recorder = { stream, src, proc, chunks,
+    recorder = { stream, src, proc, mute, chunks,
       stop: function(){
         if(stopped) return new Float32Array(0);
         stopped = true;
@@ -609,7 +609,7 @@ async function startRecording(){
         all.set(headSnap);
         for(var i=0;i<chunks.length;i++){ all.set(chunks[i],off); off+=chunks[i].length; }
         proc.onaudioprocess = null;
-        src.disconnect(); proc.disconnect();
+        src.disconnect(); proc.disconnect(); mute.disconnect();
         if(recorder && recorder.stream === stream && recorder.src === src) recorder = null;
         // 前置缓冲不能掩盖本次麦克风失效或全静音。
         if(ctx.state !== "running" || !isMicStreamUsable(stream) || !chunks.some(function(chunk){ return chunk.some(function(value){ return value !== 0; }); })) return new Float32Array(0);
@@ -618,7 +618,7 @@ async function startRecording(){
     };
     return recorder;
   }catch(e){
-    [src, proc].filter(Boolean).forEach(function(node){ node.disconnect(); });
+    [src, proc, mute].filter(Boolean).forEach(function(node){ node.disconnect(); });
     releaseMicStream(); throw e;
   }
 }
@@ -1161,7 +1161,6 @@ function bindRecButton(btn){
     endHold();
   }, {passive:false});
   btn.addEventListener("pointercancel", function(e){ e.preventDefault(); if(rec.autoMode){ cancelAutoRec(); return; } rec.cancelled = true; endHold(); }, {passive:false});
-  btn.addEventListener("pointermove", function(e){ if(!rec.active) return; var moved = rec.startY - e.clientY; setRecState(moved > 60 ? "cancel" : "listen"); }, {passive:true});
 }
 bindRecButton($("recBtn"));
 function setRecState(mode){

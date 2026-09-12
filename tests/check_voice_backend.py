@@ -6,6 +6,7 @@ import importlib.util
 import io
 import pathlib
 import os
+import math
 import sys
 import tempfile
 import unittest
@@ -32,6 +33,17 @@ def recording(sample):
         wav.setsampwidth(2)
         wav.setframerate(16000)
         wav.writeframes(sample.to_bytes(2, "little", signed=True) * 3200)
+    return output.getvalue()
+
+
+def quiet_tone_recording(amplitude=0.01):
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        samples = [int(32767 * amplitude * math.sin(2 * math.pi * 220 * i / 16000)) for i in range(6400)]
+        wav.writeframes(b"".join(sample.to_bytes(2, "little", signed=True) for sample in samples))
     return output.getvalue()
 
 
@@ -73,6 +85,14 @@ class VoiceBackendContractTest(unittest.TestCase):
                 self.assertEqual(response.json["code"], "silent_audio")
                 self.assertNotIn("text", response.json)
             recognize.assert_not_called()
+
+    def test_quiet_voice_is_boosted_before_recognition(self):
+        original, _ = server_voice.wav_bytes_to_samples(quiet_tone_recording())
+        boosted, _ = server_voice.wav_bytes_to_samples(server_voice.normalize_wav(quiet_tone_recording()))
+        original_peak = float(abs(original).max())
+        boosted_peak = float(abs(boosted).max())
+        self.assertGreater(boosted_peak, original_peak * 1.5)
+        self.assertLessEqual(boosted_peak, 0.9)
 
     def test_invalid_wav_never_reaches_a_recognizer(self):
         with patch.object(server_voice, "recognize") as recognize:
