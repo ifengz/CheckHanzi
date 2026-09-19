@@ -529,6 +529,7 @@ var audioCtx = null; var recorder = null;
 var micWarm = null;            // {stream, src, proc, mute} 常驻
 var preroll = null;            // {buf, w, filled} buf 长度按实际采样率 1 秒，创建时定
 var PREROLL_MS = 350;          // 实际拼接的前置时长
+var MIC_START_TIMEOUT_MS = 5000;
 function isMicStreamUsable(stream){
   return stream.getAudioTracks().some(function(track){ return track.readyState === "live" && track.enabled && !track.muted; });
 }
@@ -541,17 +542,35 @@ function releaseMicStream(){
 }
 var ensureMicStream = (function(){
   var pending = null;
+  function waitFor(promise, message){
+    var timer = 0;
+    var timeout = new Promise(function(_, reject){
+      timer = setTimeout(function(){ reject(new Error(message)); }, MIC_START_TIMEOUT_MS);
+    });
+    return Promise.race([promise, timeout]).finally(function(){ clearTimeout(timer); });
+  }
   async function acquire(){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("浏览器不支持麦克风");
     if(!audioCtx || audioCtx.state === "closed"){
       releaseMicStream();
       audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     }
-    if(audioCtx.state !== "running") await audioCtx.resume();
+    if(audioCtx.state !== "running") await waitFor(audioCtx.resume(), "麦克风启动超时，请再按一次");
     if(audioCtx.state !== "running") throw new Error("麦克风未就绪，请再按一次");
     if(micWarm && isMicStreamUsable(micWarm.stream)) return micWarm;
     releaseMicStream();
-    var stream = await navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:{ideal:true}, noiseSuppression:{ideal:false}, autoGainControl:{ideal:true}}});
+    var request = navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:{ideal:true}, noiseSuppression:{ideal:false}, autoGainControl:{ideal:true}}});
+    var timedOut = false;
+    var stream;
+    try{
+      stream = await waitFor(request, "麦克风启动超时，请再按一次");
+    }catch(error){
+      timedOut = error && error.message === "麦克风启动超时，请再按一次";
+      if(timedOut) request.then(function(lateStream){
+        if(lateStream && lateStream.getTracks) lateStream.getTracks().forEach(function(track){ track.stop(); });
+      }, function(){});
+      throw error;
+    }
     try{
       var src = audioCtx.createMediaStreamSource(stream);
       var proc = audioCtx.createScriptProcessor(2048, 1, 1);

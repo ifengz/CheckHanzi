@@ -172,7 +172,10 @@ assert.ok(submitEvents.some(event => event[0] === 'release'), 'server silence re
 
 const captureStart = html.indexOf('function ensureAudio(');
 const captureEnd = html.indexOf('function resample(', captureStart);
-function captureHarness(state = 'running') {
+const captureSource = html.slice(captureStart, captureEnd);
+assert.match(captureSource, /function waitFor\([\s\S]*?setTimeout[\s\S]*?Promise\.race/, 'microphone acquisition must time out instead of leaving a press pending forever');
+assert.match(captureSource, /getUserMedia\([\s\S]*?waitFor\(/, 'microphone acquisition must use the bounded wait');
+function captureHarness(state = 'running', immediateMicTimeout = false) {
   const streams = [], processors = [], constraints = [];
   let requested = 0, resumed = 0;
   const node = () => ({ connect() {}, disconnect() { this.disconnected = true; } });
@@ -183,8 +186,13 @@ function captureHarness(state = 'running') {
     createScriptProcessor() { const proc = node(); processors.push(proc); return proc; },
     createGain() { return { ...node(), gain: { value: 1 } }; },
   };
+  const timer = immediateMicTimeout
+    ? (callback, delay) => delay === 5000 ? (callback(), 1) : setTimeout(callback, delay)
+    : setTimeout;
   const capture = vm.createContext({
     Float32Array, window: { AudioContext: function() { return audio; } },
+    setTimeout: timer,
+    clearTimeout,
     navigator: { mediaDevices: { async getUserMedia(options) {
       requested++;
       constraints.push(options);
@@ -197,6 +205,18 @@ function captureHarness(state = 'running') {
   vm.runInContext(html.slice(captureStart, captureEnd), capture);
   const feed = (proc, value) => proc.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(value) } });
   return { capture, audio, streams, processors, constraints, feed, counts: () => ({ requested, resumed }) };
+}
+{
+  const h = captureHarness('running', true);
+  let lateResolve;
+  h.capture.navigator.mediaDevices.getUserMedia = () => {
+    h.capture.__micRequests = (h.capture.__micRequests || 0) + 1;
+    return new Promise(resolve => { lateResolve = resolve; });
+  };
+  await assert.rejects(h.capture.startRecording(), /麦克风启动超时/);
+  await assert.rejects(h.capture.startRecording(), /麦克风启动超时/);
+  assert.equal(h.capture.__micRequests, 2, 'a timed-out microphone request must not poison the next press');
+  lateResolve({ getTracks: () => [], getAudioTracks: () => [] });
 }
 {
   const h = captureHarness();
