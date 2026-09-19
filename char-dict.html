@@ -226,6 +226,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   #home .home-brand{font-size:18px;letter-spacing:0;}
   #lookupWorkspace .page-head{margin:4px 8px;}
 }
+#micStatus{order:3;min-height:20px;margin:0;text-align:center;font-size:13px;line-height:20px;color:#555;}
+#micStatus[data-state="ready"]{color:#237744;}
+@media (max-width:899px), (orientation:portrait){#home #micStatus{grid-column:2;grid-row:3;text-align:left;}}
 </style>
 
 </head>
@@ -239,6 +242,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
     <button type="button" role="tab" data-language="en" aria-selected="false">English</button>
   </div>
   <button id="recBtn" aria-label="按住说话查字"><span class="mic" data-lucide="mic"></span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-dots"><i></i><i></i><i></i></span><span class="rec-txt">松开 查字</span></span></button>
+  <p id="micStatus" role="status" aria-live="polite" data-state="idle">正在检查麦克风…</p>
   <button id="historyBtn">📖 查过的内容 <span class="n" id="histCount"></span></button>
   <div id="warnBanner">⚠️ 语音功能未就绪，请检查网络后重试。<button id="voiceRetry" type="button">重试</button></div>
 </div>
@@ -521,7 +525,7 @@ function playTTSSamples(samples, sampleRate, btn, seq){
   if(audioCtx.state === "running"){ doPlay(); return; }
   audioCtx.resume().then(doPlay).catch(fail);
 }
-function ensureAudio(){ try{ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state === "suspended") audioCtx.resume(); }catch(e){} }
+function ensureAudio(){ try{ if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state === "suspended" || audioCtx.state === "interrupted") Promise.resolve(audioCtx.resume()).catch(function(){}); }catch(e){} }
 var audioCtx = null; var recorder = null;
 // ── 麦克风常驻流 + 前置环形缓冲：消除 getUserMedia 冷启动延迟吞句首字的问题 ──
 // 孩子按下按钮才 getUserMedia 时，iPad 首次要 200-800ms，开头语音直接没了（"少字"主因）。
@@ -531,6 +535,13 @@ var preroll = null;            // {buf, w, filled} buf 长度按实际采样率 
 var PREROLL_MS = 350;          // 实际拼接的前置时长
 var MIC_START_TIMEOUT_MS = 5000;
 var micGeneration = 0;
+var micPrewarmToken = 0;
+var micNeedsGesture = false;
+function setMicStatus(state, text){
+  if(typeof document === "undefined") return;
+  var status = document.getElementById("micStatus");
+  if(status && (status.dataset.state !== state || status.textContent !== text)){ status.dataset.state = state; status.textContent = text; }
+}
 function resetCaptureAudio(){
   var old = audioCtx; audioCtx = null;
   releaseMicStream();
@@ -541,6 +552,7 @@ function isMicStreamUsable(stream){
 }
 function releaseMicStream(){
   micGeneration++;
+  setMicStatus("idle", "麦克风未启动");
   var warm = micWarm; micWarm = null; preroll = null;
   if(!warm) return;
   warm.proc.onaudioprocess = null;
@@ -577,6 +589,7 @@ var ensureMicStream = (function(){
     if(micWarm && isMicStreamUsable(micWarm.stream) && Date.now() - micWarm.lastFrame < 1500) return micWarm;
     releaseMicStream();
     var generation = micGeneration;
+    setMicStatus("starting", "麦克风启动中…");
     var request = navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:{ideal:true}, noiseSuppression:{ideal:false}, autoGainControl:{ideal:true}}});
     var timedOut = false;
     var stream;
@@ -594,8 +607,12 @@ var ensureMicStream = (function(){
       var src = audioCtx.createMediaStreamSource(stream);
       var proc = audioCtx.createScriptProcessor(2048, 1, 1);
       var buffer = { buf: new Float32Array(audioCtx.sampleRate || 16000), w: 0, filled: 0 };
+      var frameResolve;
+      var firstFrame = new Promise(function(resolve){ frameResolve = resolve; });
       proc.onaudioprocess = function(ev){
         if(micWarm && micWarm.proc === proc) micWarm.lastFrame = Date.now();
+        frameResolve();
+        setMicStatus("ready", "麦克风已就绪");
         if(window.__prerollPaused) return;
         var d = ev.inputBuffer.getChannelData(0);
         for(var i=0;i<d.length;i++){ buffer.buf[buffer.w] = d[i]; buffer.w = (buffer.w+1) % buffer.buf.length; }
@@ -604,7 +621,7 @@ var ensureMicStream = (function(){
       var mute = audioCtx.createGain(); mute.gain.value = 0;
       src.connect(proc); proc.connect(mute); mute.connect(audioCtx.destination);
       preroll = buffer;
-      micWarm = { stream: stream, src: src, proc: proc, mute: mute, lastFrame: Date.now() };
+      micWarm = { stream: stream, src: src, proc: proc, mute: mute, lastFrame: Date.now(), firstFrame: firstFrame };
       return micWarm;
     }catch(error){
       [src, proc, mute].filter(Boolean).forEach(function(node){ node.disconnect(); });
@@ -617,6 +634,39 @@ var ensureMicStream = (function(){
     return pending;
   };
 })();
+async function prewarmMicrophone(fromGesture){
+  var token = ++micPrewarmToken;
+  setMicStatus("starting", "麦克风启动中…");
+  if(fromGesture) ensureAudio();
+  try{
+    if(!fromGesture && navigator.permissions && navigator.permissions.query){
+      var permission;
+      try{ permission = await navigator.permissions.query({name:"microphone"}); }catch(e){}
+      if(token !== micPrewarmToken || document.hidden) return;
+      if(permission && permission.state !== "granted"){
+        micNeedsGesture = true;
+        setMicStatus("gesture", permission.state === "denied" ? "麦克风权限未开启" : "轻点启用麦克风");
+        return;
+      }
+    }
+    if(token !== micPrewarmToken || document.hidden) return;
+    var warm = await ensureMicStream();
+    var timer;
+    try{
+      await Promise.race([warm.firstFrame, new Promise(function(_, reject){
+        timer = setTimeout(function(){ reject(new Error("麦克风未收到音频")); }, MIC_START_TIMEOUT_MS);
+      })]);
+    }finally{ clearTimeout(timer); }
+    if(token !== micPrewarmToken || document.hidden) return;
+    micNeedsGesture = false;
+    setMicStatus("ready", "麦克风已就绪");
+  }catch(error){
+    if(token !== micPrewarmToken || document.hidden) return;
+    micNeedsGesture = true;
+    if(!rec.active && !rec.releasePending && !rec.recorderObj) resetCaptureAudio();
+    setMicStatus("gesture", "轻点启用麦克风");
+  }
+}
 function takePrerollBefore(startW){
   // 取【按下按钮之前】的 PREROLL_MS 毫秒：(startW - n, startW] 区间，绝不包含按下之后的数据
   if(!audioCtx || !preroll || preroll.filled <= 0) return new Float32Array(0);
@@ -1200,6 +1250,7 @@ function bindRecButton(btn){
   btn.addEventListener("pointerdown", function(e){
     e.preventDefault();
     if(e.isPrimary === false || (e.button !== undefined && e.button !== 0)) return;
+    if(micNeedsGesture){ prewarmMicrophone(true); return; }
     if(rec.autoMode){ cancelAutoRec(); return; }
     rec.btn = btn;
     rec.startY = e.clientY;
@@ -1317,6 +1368,7 @@ function scheduleAutoCapture(){
 function startHold(){
   if(rec.active) return;
   cancelSpeech();
+  ensureAudio();
   var seq = ++rec.captureSeq;
   clearTimeout(rec.readyTimer); clearTimeout(rec.tailTimer);
   if(rec.recorderObj){ rec.recorderObj.stop(); rec.recorderObj = null; }
@@ -1624,13 +1676,16 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
 updateHistoryUI();
 document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
 function suspendCapture(){
+  micPrewarmToken++;
   if(rec.active || rec.autoMode || rec.releasePending || rec.recorderObj) cancelAutoRec();
   else rec.captureSeq++;
   cancelSpeech();
   resetCaptureAudio();
 }
-document.addEventListener("visibilitychange", function(){ if(document.hidden) suspendCapture(); });
+document.addEventListener("visibilitychange", function(){ if(document.hidden) suspendCapture(); else prewarmMicrophone(false); });
 window.addEventListener("pagehide", suspendCapture);
+window.addEventListener("pageshow", function(event){ if(event.persisted) prewarmMicrophone(false); });
+prewarmMicrophone(false);
 
 // 探测现有语音服务并明确提示连接状态。
 function pingCloud(){

@@ -350,6 +350,64 @@ for (const broken of ['ended', 'muted', 'disabled']) {
 }
 
 const waveStart = html.indexOf('function startWave(');
+function prewarmHarness(permission = 'granted') {
+  const h = captureHarness();
+  const status = {dataset:{}, textContent:''};
+  Object.assign(h.capture, {
+    document: {hidden:false, getElementById:() => status},
+    rec: {active:false},
+  });
+  h.capture.navigator.permissions = {query:async () => ({state:permission})};
+  return {...h, status};
+}
+{
+  const h = prewarmHarness();
+  const pending = h.capture.prewarmMicrophone(false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.notEqual(h.status.dataset.state, 'ready', 'permission alone cannot establish microphone readiness');
+  h.feed(h.capture.micWarm.proc, 0.01);
+  await pending;
+  assert.equal(h.status.textContent, '麦克风已就绪');
+  assert.equal(h.capture.recorder, null, 'prewarm must not start a recognition recording');
+  const recorder = await h.capture.startRecording();
+  assert.equal(h.counts().requested, 1, 'first press must reuse the prewarmed hardware');
+  h.feed(recorder.proc, 0.02); recorder.stop();
+  h.capture.releaseMicStream();
+}
+for (const permission of ['prompt', 'denied']) {
+  const h = prewarmHarness(permission);
+  await h.capture.prewarmMicrophone(false);
+  assert.equal(h.counts().requested, 0, 'automatic startup must not request ungranted permission');
+  assert.equal(h.capture.micNeedsGesture, true);
+  assert.equal(h.status.dataset.state, 'gesture');
+  const pending = h.capture.prewarmMicrophone(true);
+  await new Promise(resolve => setImmediate(resolve));
+  h.feed(h.capture.micWarm.proc, 0.01);
+  await pending;
+  assert.equal(h.capture.micNeedsGesture, false);
+  h.capture.releaseMicStream();
+}
+{
+  const h = prewarmHarness();
+  let permissionResolve;
+  h.capture.navigator.permissions.query = () => new Promise(resolve => { permissionResolve = resolve; });
+  const pending = h.capture.prewarmMicrophone(false);
+  h.capture.micPrewarmToken++;
+  h.capture.document.hidden = true;
+  permissionResolve({state:'granted'});
+  await pending;
+  assert.equal(h.counts().requested, 0, 'background transition must cancel pending prewarm');
+}
+{
+  const h = prewarmHarness();
+  h.capture.setTimeout = callback => setTimeout(callback, 0);
+  h.audio.state = 'suspended';
+  h.audio.resume = () => new Promise(() => {});
+  await h.capture.prewarmMicrophone(false);
+  assert.equal(h.capture.audioCtx, null);
+  assert.equal(h.capture.micNeedsGesture, true);
+  assert.equal(h.status.textContent, '轻点启用麦克风');
+}
 function holdHarness() {
   const h = captureHarness();
   const events = [], timers = new Map();
