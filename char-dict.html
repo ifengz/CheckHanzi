@@ -542,10 +542,10 @@ function releaseMicStream(){
 }
 var ensureMicStream = (function(){
   var pending = null;
-  function waitFor(promise, message){
+  function waitFor(promise, message, code){
     var timer = 0;
     var timeout = new Promise(function(_, reject){
-      timer = setTimeout(function(){ reject(new Error(message)); }, MIC_START_TIMEOUT_MS);
+      timer = setTimeout(function(){ var error = new Error(message); error.code = code || "startup_timeout"; reject(error); }, MIC_START_TIMEOUT_MS);
     });
     return Promise.race([promise, timeout]).finally(function(){ clearTimeout(timer); });
   }
@@ -555,7 +555,17 @@ var ensureMicStream = (function(){
       releaseMicStream();
       audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     }
-    if(audioCtx.state !== "running") await waitFor(audioCtx.resume(), "麦克风启动超时，请再按一次");
+    if(audioCtx.state !== "running"){
+      try{
+        await waitFor(audioCtx.resume(), "音频启动超时，请再按一次", "audio_context_timeout");
+      }catch(error){
+        // Safari can leave an interrupted AudioContext permanently suspended;
+        // discard it so the next user gesture creates a fresh context.
+        var staleCtx = audioCtx; audioCtx = null; releaseMicStream();
+        try{ if(staleCtx && staleCtx.state !== "closed") staleCtx.close(); }catch(closeError){}
+        throw error;
+      }
+    }
     if(audioCtx.state !== "running") throw new Error("麦克风未就绪，请再按一次");
     if(micWarm && isMicStreamUsable(micWarm.stream)) return micWarm;
     releaseMicStream();
@@ -563,9 +573,9 @@ var ensureMicStream = (function(){
     var timedOut = false;
     var stream;
     try{
-      stream = await waitFor(request, "麦克风启动超时，请再按一次");
+      stream = await waitFor(request, "麦克风权限启动超时，请检查浏览器权限后再试", "mic_request_timeout");
     }catch(error){
-      timedOut = error && error.message === "麦克风启动超时，请再按一次";
+      timedOut = error && error.code === "mic_request_timeout";
       if(timedOut) request.then(function(lateStream){
         if(lateStream && lateStream.getTracks) lateStream.getTracks().forEach(function(track){ track.stop(); });
       }, function(){});

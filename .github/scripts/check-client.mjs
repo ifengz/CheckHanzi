@@ -213,10 +213,16 @@ function captureHarness(state = 'running', immediateMicTimeout = false) {
     h.capture.__micRequests = (h.capture.__micRequests || 0) + 1;
     return new Promise(resolve => { lateResolve = resolve; });
   };
-  await assert.rejects(h.capture.startRecording(), /麦克风启动超时/);
-  await assert.rejects(h.capture.startRecording(), /麦克风启动超时/);
+  await assert.rejects(h.capture.startRecording(), /麦克风权限启动超时/);
+  await assert.rejects(h.capture.startRecording(), /麦克风权限启动超时/);
   assert.equal(h.capture.__micRequests, 2, 'a timed-out microphone request must not poison the next press');
   lateResolve({ getTracks: () => [], getAudioTracks: () => [] });
+}
+{
+  const h = captureHarness('suspended', true);
+  h.audio.resume = () => new Promise(() => {});
+  await assert.rejects(h.capture.startRecording(), /音频启动超时/);
+  assert.equal(h.capture.audioCtx, null, 'a stuck AudioContext must be discarded so the next press can create a fresh one');
 }
 {
   const h = captureHarness();
