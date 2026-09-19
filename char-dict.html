@@ -530,10 +530,17 @@ var micWarm = null;            // {stream, src, proc, mute} 常驻
 var preroll = null;            // {buf, w, filled} buf 长度按实际采样率 1 秒，创建时定
 var PREROLL_MS = 350;          // 实际拼接的前置时长
 var MIC_START_TIMEOUT_MS = 5000;
+var micGeneration = 0;
+function resetCaptureAudio(){
+  var old = audioCtx; audioCtx = null;
+  releaseMicStream();
+  if(old && old.state !== "closed"){ try{ Promise.resolve(old.close()).catch(function(){}); }catch(e){} }
+}
 function isMicStreamUsable(stream){
   return stream.getAudioTracks().some(function(track){ return track.readyState === "live" && track.enabled && !track.muted; });
 }
 function releaseMicStream(){
+  micGeneration++;
   var warm = micWarm; micWarm = null; preroll = null;
   if(!warm) return;
   warm.proc.onaudioprocess = null;
@@ -558,17 +565,18 @@ var ensureMicStream = (function(){
     if(audioCtx.state !== "running"){
       try{
         await waitFor(audioCtx.resume(), "音频启动超时，请再按一次", "audio_context_timeout");
+        if(audioCtx.state !== "running") throw new Error("音频未恢复，请再按一次");
       }catch(error){
         // Safari can leave an interrupted AudioContext permanently suspended;
         // discard it so the next user gesture creates a fresh context.
-        var staleCtx = audioCtx; audioCtx = null; releaseMicStream();
-        try{ if(staleCtx && staleCtx.state !== "closed") staleCtx.close(); }catch(closeError){}
+        resetCaptureAudio();
         throw error;
       }
     }
     if(audioCtx.state !== "running") throw new Error("麦克风未就绪，请再按一次");
-    if(micWarm && isMicStreamUsable(micWarm.stream)) return micWarm;
+    if(micWarm && isMicStreamUsable(micWarm.stream) && Date.now() - micWarm.lastFrame < 1500) return micWarm;
     releaseMicStream();
+    var generation = micGeneration;
     var request = navigator.mediaDevices.getUserMedia({audio:{channelCount:1, sampleRate:16000, echoCancellation:{ideal:true}, noiseSuppression:{ideal:false}, autoGainControl:{ideal:true}}});
     var timedOut = false;
     var stream;
@@ -582,10 +590,12 @@ var ensureMicStream = (function(){
       throw error;
     }
     try{
+      if(generation !== micGeneration){ stream.getTracks().forEach(function(track){ track.stop(); }); throw new Error("录音已取消，请再按一次"); }
       var src = audioCtx.createMediaStreamSource(stream);
       var proc = audioCtx.createScriptProcessor(2048, 1, 1);
       var buffer = { buf: new Float32Array(audioCtx.sampleRate || 16000), w: 0, filled: 0 };
       proc.onaudioprocess = function(ev){
+        if(micWarm && micWarm.proc === proc) micWarm.lastFrame = Date.now();
         if(window.__prerollPaused) return;
         var d = ev.inputBuffer.getChannelData(0);
         for(var i=0;i<d.length;i++){ buffer.buf[buffer.w] = d[i]; buffer.w = (buffer.w+1) % buffer.buf.length; }
@@ -594,7 +604,7 @@ var ensureMicStream = (function(){
       var mute = audioCtx.createGain(); mute.gain.value = 0;
       src.connect(proc); proc.connect(mute); mute.connect(audioCtx.destination);
       preroll = buffer;
-      micWarm = { stream: stream, src: src, proc: proc, mute: mute };
+      micWarm = { stream: stream, src: src, proc: proc, mute: mute, lastFrame: Date.now() };
       return micWarm;
     }catch(error){
       [src, proc, mute].filter(Boolean).forEach(function(node){ node.disconnect(); });
@@ -626,13 +636,23 @@ async function startRecording(){
     // 开始时拷贝前置缓冲，避免录音期间环形缓冲被覆盖后重复拼入本次语音。
     var headSnap = (preroll && preroll.filled > 0 && !window.__prerollPaused)
       ? takePrerollBefore(preroll.w) : new Float32Array(0);
-    proc.onaudioprocess = function(ev){ chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0))); };
+    var readyResolve;
+    var ready = new Promise(function(resolve){ readyResolve = resolve; });
+    var level = 0;
+    proc.onaudioprocess = function(ev){
+      var data = new Float32Array(ev.inputBuffer.getChannelData(0));
+      chunks.push(data);
+      level = Math.sqrt(data.reduce(function(sum, value){ return sum + value * value; }, 0) / data.length);
+      readyResolve(true);
+    };
     src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
     var stopped = false;
-    recorder = { stream, src, proc, mute, chunks,
+    recorder = { stream, src, proc, mute, chunks, ready,
+      getLevel: function(){ return level; },
       stop: function(){
         if(stopped) return new Float32Array(0);
         stopped = true;
+        readyResolve(false);
         var total = headSnap.length + chunks.reduce(function(a,c){ return a+c.length; },0);
         var all = new Float32Array(total); var off = headSnap.length;
         all.set(headSnap);
@@ -1179,6 +1199,7 @@ function bindRecButton(btn){
   btn.addEventListener("contextmenu", function(e){ e.preventDefault(); });
   btn.addEventListener("pointerdown", function(e){
     e.preventDefault();
+    if(e.isPrimary === false || (e.button !== undefined && e.button !== 0)) return;
     if(rec.autoMode){ cancelAutoRec(); return; }
     rec.btn = btn;
     rec.startY = e.clientY;
@@ -1193,7 +1214,7 @@ function bindRecButton(btn){
 }
 bindRecButton($("recBtn"));
 function setRecState(mode){
-  // mode: "listen" | "cancel" | "recognize" | "off"
+  // mode: "starting" | "listen" | "cancel" | "recognize" | "off"
   var btn = rec.btn; if(!btn) return;
   var isMain = (btn.id === "recBtn");
   if(mode === "cancel") rec.cancelled = true;
@@ -1219,7 +1240,7 @@ function setRecState(mode){
   // on
   btn.classList.add("holding");
   var wt = getWaveTxt();
-  if(mode === "listen"){
+  if(mode === "listen" || mode === "starting"){
     stopRecTips();
     if(isMain){
       btn.querySelector(".rec-state").style.display="flex";
@@ -1230,9 +1251,9 @@ function setRecState(mode){
       $("recStatusPill").style.display="flex";
       $("pillTxt").classList.remove("recognizing");
     }
-    if(wt.w) wt.w.style.display="flex";
-    if(wt.t) wt.t.textContent="松开 查字";
-    startWave();
+    if(wt.w) wt.w.style.display = mode === "starting" ? "none" : "flex";
+    if(wt.t) wt.t.textContent = mode === "starting" ? "麦克风启动中…" : "松开 查字";
+    if(mode === "starting") stopWave(); else startWave();
   } else if(mode === "cancel"){
     if(isMain){ btn.querySelector(".rec-state").style.display="flex"; }
     else $("recStatusPill").style.display="flex";
@@ -1253,6 +1274,7 @@ function setRecState(mode){
   }
 }
 function cancelAutoRec(){
+  clearTimeout(rec.readyTimer); clearTimeout(rec.tailTimer); rec.releasePending = false;
   rec.autoMode = false; clearTimeout(rec.autoTimer); rec.autoTimer = null; clearTimeout(rec.timeoutTimer);
   rec.captureSeq++;
   rec.cancelled = true; stopWave(); rec.active = false;
@@ -1294,22 +1316,42 @@ function scheduleAutoCapture(){
 }
 function startHold(){
   if(rec.active) return;
-  if(!cloudASR){ toast("语音服务连不上，检查网络后再试"); return; }
   cancelSpeech();
   var seq = ++rec.captureSeq;
+  clearTimeout(rec.readyTimer); clearTimeout(rec.tailTimer);
+  if(rec.recorderObj){ rec.recorderObj.stop(); rec.recorderObj = null; }
   rec.language = lookupLanguage;
   rec.active = true; rec.cancelled = false; rec.autoMode = false; rec.releasePending = false; rec.startTime = Date.now();
-  if(rec.btn) rec.btn.classList.add("holding"); setRecState("listen");
+  if(rec.btn) rec.btn.classList.add("holding"); setRecState("starting");
+  stopWave();
+  var label = rec.btn.id === "recBtn" ? rec.btn.querySelector(".rec-txt") : $("pillTxt");
+  if(label) label.textContent = "麦克风启动中…";
+  rec.captureReady = false;
   startRecording().then(function(recorderObj){
     if(seq !== rec.captureSeq || (!rec.active && !rec.autoMode && !rec.releasePending)){ try{ recorderObj.stop(); }catch(e){} return; }
-    rec.recorderObj = recorderObj; rec.recStarted = Date.now();
-    if(rec.releasePending){
-      rec.releasePending = false; rec.recorderObj = null;
-      submitRecording(recorderObj.stop(), rec.captureSeq, rec.language);
-      return;
-    }
-    if(rec.autoMode){ scheduleAutoCapture(); return; }
-    rec.timeoutTimer = setTimeout(function(){ if(rec.active && seq === rec.captureSeq) endHold(true); }, 12000);
+    rec.recorderObj = recorderObj;
+    return new Promise(function(resolve, reject){
+      var readyTimer = setTimeout(function(){
+        if(seq !== rec.captureSeq) return resolve(false);
+        reject(new Error("麦克风没有收到音频，请再按一次"));
+        recorderObj.stop(); rec.recorderObj = null;
+        resetCaptureAudio();
+      }, MIC_START_TIMEOUT_MS);
+      rec.readyTimer = readyTimer;
+      recorderObj.ready.then(function(ok){ clearTimeout(readyTimer); resolve(ok); });
+    }).then(function(ok){
+      if(!ok || seq !== rec.captureSeq) return;
+      rec.captureReady = true; rec.recStarted = Date.now();
+      setRecState("listen");
+      if(rec.releasePending){
+        rec.releasePending = false; rec.autoMode = true; rec.active = true;
+        if(label) label.textContent = "请说话…";
+        scheduleAutoCapture();
+        return;
+      }
+      if(rec.autoMode){ if(label) label.textContent = "正在听…"; scheduleAutoCapture(); return; }
+      rec.timeoutTimer = setTimeout(function(){ if(rec.active && seq === rec.captureSeq) endHold(true); }, 12000);
+    });
   }).catch(function(err){
     if(seq !== rec.captureSeq) return;
     if(!rec.active && !rec.releasePending) return;
@@ -1326,11 +1368,11 @@ function endHold(autoStop){
     stopWave(); clearTimeout(rec.autoTimer); rec.autoTimer = null;
     if(rec.btn) rec.btn.classList.remove("holding");
     rec.autoMode = true;
-    setRecState("listen");
+    setRecState(rec.captureReady ? "listen" : "starting");
     // 自动录音模式：手指已放开，提示"正在听"，再点一下取消
     var wt2 = rec.btn.id === "recBtn" ? rec.btn.querySelector(".rec-txt") : $("pillTxt");
-    if(wt2) wt2.textContent = "正在听…";
-    if(rec.recorderObj) scheduleAutoCapture();
+    if(wt2) wt2.textContent = rec.captureReady ? "正在听…" : "麦克风启动中…";
+    if(rec.captureReady && rec.recorderObj) scheduleAutoCapture();
     return;
   }
   var cancelled = rec.cancelled;
@@ -1338,19 +1380,30 @@ function endHold(autoStop){
   rec.active = false; clearTimeout(rec.autoTimer); rec.autoTimer = null;
   if(cancelled){ if(rec.recorderObj){ try{ rec.recorderObj.stop(); }catch(e){} } rec.recorderObj = null; return; }
   var recorderObj = rec.recorderObj; rec.recorderObj = null;
-  if(!recorderObj){
-    // 权限/设备启动尚未完成时，等录音器就绪再结束本次录音，避免误报“没听到声音”。
+  if(!recorderObj || !rec.captureReady){
+    // 启动期间松手：收到音频后保留自动录音窗口，不能立刻停止空录音器。
     rec.releasePending = true;
+    rec.recorderObj = recorderObj;
+    setRecState("starting");
     return;
   }
-  submitRecording(recorderObj.stop(), rec.captureSeq, rec.language);
+  var seq = rec.captureSeq, language = rec.language;
+  rec.recorderObj = recorderObj;
+  rec.tailTimer = setTimeout(function(){
+    if(seq !== rec.captureSeq) return;
+    rec.recorderObj = null; rec.active = false;
+    submitRecording(recorderObj.stop(), seq, language);
+  }, 300);
 }
 function startWave(){
   if(!rec.btn) return;
   var isMain = rec.btn.id === "recBtn";
   var bars = isMain ? document.querySelectorAll("#recBtn .rec-wave i") : document.querySelectorAll("#recStatusPill .pill-wave i");
   clearInterval(rec.animTimer);
-  rec.animTimer = setInterval(function(){ bars.forEach(function(b){ b.style.height = (8+Math.round(Math.random()*35))+"px"; }); }, 110);
+  rec.animTimer = setInterval(function(){
+    var level = rec.recorderObj ? rec.recorderObj.getLevel() : 0;
+    bars.forEach(function(b){ b.style.height = (8 + Math.round(Math.min(1, level * 12) * 35))+"px"; });
+  }, 110);
 }
 function stopWave(){ clearInterval(rec.animTimer); }
 function handleVoiceResult(text){
@@ -1570,6 +1623,14 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
 }
 updateHistoryUI();
 document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
+function suspendCapture(){
+  if(rec.active || rec.autoMode || rec.releasePending || rec.recorderObj) cancelAutoRec();
+  else rec.captureSeq++;
+  cancelSpeech();
+  resetCaptureAudio();
+}
+document.addEventListener("visibilitychange", function(){ if(document.hidden) suspendCapture(); });
+window.addEventListener("pagehide", suspendCapture);
 
 // 探测现有语音服务并明确提示连接状态。
 function pingCloud(){
