@@ -89,6 +89,26 @@ def test_real_dictionary_words():
             assert_word(client, query, word)
 
 
+def test_numeric_asr_transcript_looks_up_english_number():
+    with tempfile.TemporaryDirectory() as directory:
+        client = make_client(os.path.join(directory, "cache.sqlite3"))
+        for query in ("11", "11."):
+            response = post(client, query)
+            assert response.status_code == 200, (query, response.status_code, response.get_json())
+            body = response.get_json()
+            assert body["kind"] == "word"
+            assert body["query"] == query
+            assert body["word"] == "11"
+            assert body["meanings"][0]["translation"] == "eleven"
+
+
+def test_malformed_numeric_transcript_is_rejected():
+    with tempfile.TemporaryDirectory() as directory:
+        response = post(make_client(os.path.join(directory, "cache.sqlite3")), "11!!")
+        assert response.status_code == 400
+        assert response.get_json()["error"]["code"] == "invalid_request"
+
+
 def test_dictionary_manifest():
     directory = Path(ROOT) / "data/english"
     manifest = json.loads((directory / "manifest.json").read_text())

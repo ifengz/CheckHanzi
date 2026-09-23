@@ -26,6 +26,7 @@ SOURCE = {"name": "ECDICT", "url": "https://github.com/skywind3000/ECDICT"}
 TRANSLATION_SOURCE = {"name": "MyMemory", "url": "https://mymemory.translated.net/"}
 
 _SINGLE_WORD_RE = re.compile(r"^([A-Za-z]+(?:['-][A-Za-z]+)*)(?:[.!?])?$")
+_NUMERIC_QUERY_RE = re.compile(r"^([0-9]+)(?:[.!?])?$")
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 _POS_PREFIX_RE = re.compile(r"^([A-Za-z]+(?:\.[A-Za-z]+)*\.)\s*(.*)$")
@@ -89,14 +90,18 @@ def _validate_text(payload):
         raise EnglishLookupError("text 不能为空")
     if len(text) > 300 or len(text.encode("utf-8")) > 500:
         raise EnglishLookupError("text 最多 300 个字符且 UTF-8 不超过 500 字节")
-    if _CJK_RE.search(text) or not _LATIN_RE.search(text):
-        raise EnglishLookupError("只支持包含拉丁字母的英文文本")
+    numeric_query = _NUMERIC_QUERY_RE.fullmatch(normalize_query(text))
+    if _CJK_RE.search(text) or not (_LATIN_RE.search(text) or numeric_query):
+        raise EnglishLookupError("只支持包含英文或数字的文本")
     return text
 
 
 def _dictionary_key(text):
     key = normalize_query(text)
     match = _SINGLE_WORD_RE.fullmatch(key)
+    if match:
+        return match.group(1)
+    match = _NUMERIC_QUERY_RE.fullmatch(key)
     return match.group(1) if match else key
 
 
