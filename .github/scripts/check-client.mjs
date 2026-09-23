@@ -212,15 +212,21 @@ function captureHarness(state = 'running', immediateMicTimeout = false) {
 }
 {
   const h = captureHarness('running', true);
-  let lateResolve;
+  const lateResolvers = [], lateTracks = [];
   h.capture.navigator.mediaDevices.getUserMedia = () => {
     h.capture.__micRequests = (h.capture.__micRequests || 0) + 1;
-    return new Promise(resolve => { lateResolve = resolve; });
+    return new Promise(resolve => { lateResolvers.push(resolve); });
   };
   await assert.rejects(h.capture.startRecording(), /麦克风权限启动超时/);
   await assert.rejects(h.capture.startRecording(), /麦克风权限启动超时/);
   assert.equal(h.capture.__micRequests, 2, 'a timed-out microphone request must not poison the next press');
-  lateResolve({ getTracks: () => [], getAudioTracks: () => [] });
+  lateResolvers.forEach(resolve => {
+    const track = {readyState:'live', enabled:true, muted:false, stop(){ this.readyState = 'ended'; }};
+    lateTracks.push(track);
+    resolve({getTracks:() => [track], getAudioTracks:() => [track]});
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(lateTracks.every(track => track.readyState === 'ended'), 'timed-out late microphone streams must release their tracks');
 }
 {
   const h = captureHarness('suspended', true);
@@ -353,16 +359,24 @@ const waveStart = html.indexOf('function startWave(');
 function prewarmHarness(permission = 'granted') {
   const h = captureHarness();
   const status = {dataset:{}, textContent:''};
+  const hint = {textContent:'按住说字'};
+  const button = {
+    activation:false,
+    ariaLabel:'按住说话查字',
+    classList:{toggle(name, value){ if(name === 'mic-activation') button.activation = value; }},
+    querySelector: selector => selector === '.hint' ? hint : null,
+    setAttribute(name, value){ if(name === 'aria-label') button.ariaLabel = value; },
+  };
   Object.assign(h.capture, {
-    document: {hidden:false, getElementById:() => status},
+    document: {hidden:false, getElementById: name => name === 'micStatus' ? status : button},
     rec: {active:false},
   });
   h.capture.navigator.permissions = {query:async () => ({state:permission})};
-  return {...h, status};
+  return {...h, status, button, hint};
 }
 {
   const h = prewarmHarness();
-  const pending = h.capture.prewarmMicrophone(false);
+  const pending = h.capture.prewarmMicrophone();
   await new Promise(resolve => setImmediate(resolve));
   assert.notEqual(h.status.dataset.state, 'ready', 'permission alone cannot establish microphone readiness');
   h.feed(h.capture.micWarm.proc, 0.01);
@@ -374,24 +388,111 @@ function prewarmHarness(permission = 'granted') {
   h.feed(recorder.proc, 0.02); recorder.stop();
   h.capture.releaseMicStream();
 }
-for (const permission of ['prompt', 'denied']) {
-  const h = prewarmHarness(permission);
-  await h.capture.prewarmMicrophone(false);
-  assert.equal(h.counts().requested, 0, 'automatic startup must not request ungranted permission');
-  assert.equal(h.capture.micNeedsGesture, true);
-  assert.equal(h.status.dataset.state, 'gesture');
+{
+  const h = prewarmHarness();
+  h.capture.navigator.permissions.query = async () => { throw new Error('unsupported'); };
+  const pending = h.capture.prewarmMicrophone();
+  await new Promise(resolve => setImmediate(resolve));
+  if (h.capture.micWarm) h.feed(h.capture.micWarm.proc, 0.01);
+  await pending;
+  assert.equal(h.counts().requested, 0, 'an unavailable permission query must not start a background microphone request');
+  assert.equal(h.status.textContent, '轻点启用麦克风', 'a failed prewarm must make the first action an explicit activation tap');
+  assert.equal(h.button.activation, true, 'a failed prewarm must recolor the main microphone button');
+  assert.equal(h.hint.textContent, '轻点启用麦克风', 'the main microphone button must show the activation action');
+  const recorder = await h.capture.startRecording();
+  h.feed(recorder.proc, 0.02);
+  assert.ok(recorder.stop().some(value => value !== 0), 'the first gesture must own microphone startup after a skipped prewarm');
+  h.capture.releaseMicStream();
+}
+{
+  const h = prewarmHarness();
+  h.capture.navigator.permissions.query = async () => { throw new Error('unsupported'); };
   const pending = h.capture.prewarmMicrophone(true);
   await new Promise(resolve => setImmediate(resolve));
   h.feed(h.capture.micWarm.proc, 0.01);
   await pending;
-  assert.equal(h.capture.micNeedsGesture, false);
+  assert.equal(h.counts().requested, 1, 'the activation tap must request the microphone without another permission query');
+  assert.equal(h.status.textContent, '麦克风已就绪', 'successful activation must restore the ready status');
+  assert.equal(h.capture.micNeedsGesture, false, 'successful activation must return to hold-to-talk mode');
+  assert.equal(h.button.activation, false, 'successful activation must restore the normal button color');
+  assert.equal(h.hint.textContent, '按住说字', 'successful activation must restore the hold-to-talk label');
   h.capture.releaseMicStream();
+}
+{
+  const h = prewarmHarness();
+  h.audio.state = 'suspended';
+  let resumeCalls = 0;
+  h.audio.resume = () => { resumeCalls++; return new Promise(() => {}); };
+  const pending = h.capture.prewarmMicrophone();
+  await pending;
+  assert.equal(resumeCalls, 0, 'automatic prewarm must not leave a suspended AudioContext resume pending');
+  h.audio.resume = async () => { resumeCalls++; h.audio.state = 'running'; };
+  const recorder = await h.capture.startRecording();
+  h.feed(recorder.proc, 0.02);
+  assert.ok(recorder.stop().some(value => value !== 0), 'the first gesture must recover a suspended context and record');
+  assert.equal(resumeCalls, 1, 'only the gesture-owned startup should resume the context');
+  h.capture.releaseMicStream();
+}
+{
+  const h = holdHarness();
+  const status = {dataset:{}, textContent:''};
+  Object.assign(h.capture, {document:{hidden:false, getElementById:() => status}});
+  h.capture.navigator.permissions = {query:async () => ({state:'granted'})};
+  const timers = [];
+  h.capture.setTimeout = (callback, delay) => { timers.push({ callback, delay }); return timers.length; };
+  h.capture.clearTimeout = () => {};
+  const acquire = h.capture.navigator.mediaDevices.getUserMedia;
+  let requests = 0;
+  let releaseLate;
+  let lateStream;
+  h.capture.navigator.mediaDevices.getUserMedia = () => {
+    requests++;
+    if (requests === 1) return new Promise(resolve => { releaseLate = async () => { lateStream = await acquire(); resolve(lateStream); }; });
+    return acquire();
+  };
+  const prewarm = h.capture.prewarmMicrophone();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests, 1, 'the running-context prewarm should own its first request');
+  const listeners = {};
+  const bindStart = html.indexOf('function bindRecButton(');
+  const bindEnd = html.indexOf('\nbindRecButton($("recBtn"))', bindStart);
+  vm.runInContext(html.slice(bindStart, bindEnd), h.capture);
+  h.capture.bindRecButton({
+    addEventListener: (name, handler) => { listeners[name] = handler; },
+    setPointerCapture() {}, classList:{add(){}, remove(){}},
+  });
+  let lateStopped = false;
+  try {
+    listeners.pointerdown({preventDefault(){}, isPrimary:true, button:0, pointerId:1, clientY:100});
+    await h.flush();
+    assert.equal(requests, 2, 'the gesture must issue a fresh microphone request');
+    assert.ok(h.capture.rec.recorderObj, 'the first hold must create a recorder while prewarm is pending');
+    h.feed(h.capture.rec.recorderObj.proc, 0.02);
+    await h.flush();
+    assert.equal(h.capture.rec.captureReady, true, 'the first hold must reach listening without an activation tap');
+  } finally {
+    h.capture.cancelRecording();
+    await releaseLate();
+    await new Promise(resolve => setImmediate(resolve));
+    await prewarm;
+    lateStopped = lateStream.getTracks().every(track => track.readyState === 'ended');
+    assert.ok(h.capture.micWarm, 'a stale prewarm must not reset the gesture-owned capture');
+    h.capture.releaseMicStream();
+  }
+  assert.ok(lateStopped, 'a superseded late stream must be stopped');
+}
+for (const permission of ['prompt', 'denied']) {
+  const h = prewarmHarness(permission);
+  await h.capture.prewarmMicrophone();
+  assert.equal(h.counts().requested, 0, 'automatic startup must not request ungranted permission');
+  assert.equal(h.status.dataset.state, 'gesture');
+  assert.equal(h.status.textContent, permission === 'denied' ? '麦克风权限未开启' : '轻点启用麦克风');
 }
 {
   const h = prewarmHarness();
   let permissionResolve;
   h.capture.navigator.permissions.query = () => new Promise(resolve => { permissionResolve = resolve; });
-  const pending = h.capture.prewarmMicrophone(false);
+  const pending = h.capture.prewarmMicrophone();
   h.capture.micPrewarmToken++;
   h.capture.document.hidden = true;
   permissionResolve({state:'granted'});
@@ -403,18 +504,17 @@ for (const permission of ['prompt', 'denied']) {
   h.capture.setTimeout = callback => setTimeout(callback, 0);
   h.audio.state = 'suspended';
   h.audio.resume = () => new Promise(() => {});
-  await h.capture.prewarmMicrophone(false);
+  await h.capture.prewarmMicrophone();
   assert.equal(h.capture.audioCtx, null);
-  assert.equal(h.capture.micNeedsGesture, true);
   assert.equal(h.status.textContent, '轻点启用麦克风');
 }
-function holdHarness() {
-  const h = captureHarness();
+function holdHarness(state = 'running') {
+  const h = captureHarness(state);
   const events = [], timers = new Map();
   let timerId = 0;
   Object.assign(h.capture, {
     rec: { active:false, captureSeq:0, btn:{ id:'recBtn', classList:{ add(){}, remove(){} } } },
-    lookupLanguage:'zh', cancelSpeech(){}, ensureAudio(){}, stopWave(){},
+    lookupLanguage:'zh', cancelSpeech(){}, stopWave(){},
     setRecState: mode => events.push(['state', mode]),
     toast: message => events.push(['toast', message]),
     setTimeout: (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; },
@@ -445,6 +545,25 @@ function holdHarness() {
   h.fire(148);
   assert.deepEqual(h.events.filter(event => event[0] === 'submit'), [['submit', 4096]], 'release must retain final frame');
   assert.equal(h.timers.size, 0);
+  h.capture.releaseMicStream();
+}
+{
+  const h = holdHarness('suspended');
+  const resumeResolvers = [];
+  let resumeCalls = 0;
+  h.audio.resume = () => {
+    resumeCalls++;
+    return new Promise(resolve => { resumeResolvers.push(() => { h.audio.state = 'running'; resolve(); }); });
+  };
+  h.capture.startHold();
+  try {
+    assert.equal(resumeCalls, 1, 'one hold gesture must issue only one AudioContext resume');
+  } finally {
+    resumeResolvers.forEach(resolve => resolve());
+  }
+  await h.flush();
+  assert.equal(h.counts().requested, 1, 'the hold gesture must proceed to a microphone request');
+  h.capture.cancelRecording();
   h.capture.releaseMicStream();
 }
 {
@@ -576,6 +695,7 @@ const bindEnd = html.indexOf('\nbindRecButton($("recBtn"))', bindStart);
 const listeners = {};
 const moveModes = [];
 const bindContext = vm.createContext({
+  micPrewarmToken: 0,
   rec: { active: true, cancelled: false, startY: 100 },
   cancelRecording: () => { throw new Error('pointercancel should not call cancellation twice'); },
   setRecState: mode => moveModes.push(mode),
@@ -588,12 +708,39 @@ bindContext.bindRecButton({
 listeners.pointercancel({ preventDefault() {} });
 assert.equal(listeners.pointermove, undefined, 'ordinary finger movement must not cancel an active recording');
 assert.deepEqual(moveModes, [], 'ordinary finger movement must not cancel an active recording');
+{
+  const events = [];
+  const firstPressListeners = {};
+  const firstPressContext = vm.createContext({
+    micPrewarmToken: 0,
+    rec: { active:false, cancelled:false, startY:0 },
+    micNeedsGesture: true,
+    prewarmMicrophone: () => events.push('enable'),
+    startHold: () => events.push('record'),
+    endHold() {},
+  });
+  vm.runInContext(html.slice(bindStart, bindEnd), firstPressContext);
+  firstPressContext.bindRecButton({
+    addEventListener: (name, handler) => { firstPressListeners[name] = handler; },
+    setPointerCapture() {},
+  });
+  firstPressListeners.pointerdown({
+    preventDefault() {}, isPrimary:true, button:0, pointerId:1, clientY:100,
+  });
+  assert.deepEqual(events, ['enable'], 'the first tap after automatic prewarm failure must enable the microphone without recording');
+  firstPressContext.micNeedsGesture = false;
+  firstPressListeners.pointerdown({
+    preventDefault() {}, isPrimary:true, button:0, pointerId:2, clientY:100,
+  });
+  assert.deepEqual(events, ['enable', 'record'], 'a later hold must return to normal recording after activation');
+}
 
 const languageStart = html.indexOf('function setLookupLanguage(');
 const languageEnd = html.indexOf('window.addEventListener("english-lookup-ready"', languageStart);
 const languageWorkspaceHistory = { classList: { contains: () => false } };
 const languageContext = vm.createContext({
   rec: { captureSeq:9, active:false },
+  micNeedsGesture: false,
   cancelSpeech() {}, cancelRecording() {}, setRecState() {}, showWorkspace: page => { languageContext.workspace = page; },
   $: name => name === 'history' ? languageWorkspaceHistory : (name === 'recBtn' ? { setAttribute() {}, querySelector: () => null } : null),
 });

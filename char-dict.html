@@ -26,6 +26,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #recBtn .mic svg{width:88px;height:88px;stroke-width:1.8;}
 #recBtn .hint{font-size:clamp(16px,2.4vh,24px);font-weight:700;letter-spacing:2px;opacity:.9;}
 #recBtn.holding{background:linear-gradient(135deg,#FF5A5F,#FF7A7A);box-shadow:0 8px 30px rgba(255,90,95,.4);animation:none;transform:scale(.95);}
+#recBtn.mic-activation{background:linear-gradient(135deg,#4F7FFF,#70C7FF);box-shadow:0 8px 30px rgba(79,127,255,.36),inset 0 -4px 8px rgba(0,0,0,.08);animation:none;}
+#recBtn.mic-activation .hint{font-size:clamp(14px,2.1vh,20px);letter-spacing:0;}
 #recBtn .rec-state{display:none;flex-direction:column;align-items:center;gap:clamp(6px,1vh,10px);}
 #recBtn.holding .rec-state{display:flex;}
 #recBtn.holding .mic,#recBtn.holding .hint{display:none;}
@@ -537,12 +539,29 @@ var MIC_START_TIMEOUT_MS = 5000;
 var micGeneration = 0;
 var micPrewarmToken = 0;
 var micNeedsGesture = false;
+var cancelMicStartup = function(){};
+function setMicActivationRequired(required){
+  micNeedsGesture = required;
+  if(typeof document === "undefined") return;
+  var btn = document.getElementById("recBtn");
+  if(!btn || !btn.classList) return;
+  var isEnglish = typeof lookupLanguage !== "undefined" && lookupLanguage === "en";
+  var hintText = required ? "轻点启用麦克风" : (isEnglish ? "按住说英语" : "按住说字");
+  var ariaLabel = required ? "轻点启用麦克风" : (isEnglish ? "按住说英语" : "按住说话查字");
+  btn.classList.toggle("mic-activation", required);
+  var hint = btn.querySelector ? btn.querySelector(".hint") : null;
+  if(hint) hint.textContent = hintText;
+  if(btn.setAttribute) btn.setAttribute("aria-label", ariaLabel);
+}
 function setMicStatus(state, text){
   if(typeof document === "undefined") return;
   var status = document.getElementById("micStatus");
   if(status && (status.dataset.state !== state || status.textContent !== text)){ status.dataset.state = state; status.textContent = text; }
+  if(state === "gesture") setMicActivationRequired(true);
+  else if(state === "ready") setMicActivationRequired(false);
 }
 function resetCaptureAudio(){
+  cancelMicStartup();
   var old = audioCtx; audioCtx = null;
   releaseMicStream();
   if(old && old.state !== "closed"){ try{ Promise.resolve(old.close()).catch(function(){}); }catch(e){} }
@@ -561,6 +580,13 @@ function releaseMicStream(){
 }
 var ensureMicStream = (function(){
   var pending = null;
+  var pendingOwner = "";
+  var pendingEpoch = 0;
+  cancelMicStartup = function(){
+    pendingEpoch++;
+    pending = null;
+    pendingOwner = "";
+  };
   function waitFor(promise, message, code){
     var timer = 0;
     var timeout = new Promise(function(_, reject){
@@ -568,24 +594,30 @@ var ensureMicStream = (function(){
     });
     return Promise.race([promise, timeout]).finally(function(){ clearTimeout(timer); });
   }
-  async function acquire(){
+  function canceledError(){ return new Error("录音已取消，请再按一次"); }
+  function isCurrent(epoch, ctx){ return epoch === pendingEpoch && ctx === audioCtx; }
+  async function acquire(epoch){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("浏览器不支持麦克风");
     if(!audioCtx || audioCtx.state === "closed"){
       releaseMicStream();
       audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     }
-    if(audioCtx.state !== "running"){
+    var ctx = audioCtx;
+    if(ctx.state !== "running"){
       try{
-        await waitFor(audioCtx.resume(), "音频启动超时，请再按一次", "audio_context_timeout");
-        if(audioCtx.state !== "running") throw new Error("音频未恢复，请再按一次");
+        await waitFor(ctx.resume(), "音频启动超时，请再按一次", "audio_context_timeout");
+        if(!isCurrent(epoch, ctx)) throw canceledError();
+        if(ctx.state !== "running") throw new Error("音频未恢复，请再按一次");
       }catch(error){
+        if(!isCurrent(epoch, ctx)) throw canceledError();
         // Safari can leave an interrupted AudioContext permanently suspended;
         // discard it so the next user gesture creates a fresh context.
         resetCaptureAudio();
         throw error;
       }
     }
-    if(audioCtx.state !== "running") throw new Error("麦克风未就绪，请再按一次");
+    if(!isCurrent(epoch, ctx)) throw canceledError();
+    if(ctx.state !== "running") throw new Error("麦克风未就绪，请再按一次");
     if(micWarm && isMicStreamUsable(micWarm.stream) && Date.now() - micWarm.lastFrame < 1500) return micWarm;
     releaseMicStream();
     var generation = micGeneration;
@@ -603,10 +635,10 @@ var ensureMicStream = (function(){
       throw error;
     }
     try{
-      if(generation !== micGeneration){ stream.getTracks().forEach(function(track){ track.stop(); }); throw new Error("录音已取消，请再按一次"); }
-      var src = audioCtx.createMediaStreamSource(stream);
-      var proc = audioCtx.createScriptProcessor(2048, 1, 1);
-      var buffer = { buf: new Float32Array(audioCtx.sampleRate || 16000), w: 0, filled: 0 };
+      if(!isCurrent(epoch, ctx) || generation !== micGeneration){ stream.getTracks().forEach(function(track){ track.stop(); }); throw canceledError(); }
+      var src = ctx.createMediaStreamSource(stream);
+      var proc = ctx.createScriptProcessor(2048, 1, 1);
+      var buffer = { buf: new Float32Array(ctx.sampleRate || 16000), w: 0, filled: 0 };
       var frameResolve;
       var firstFrame = new Promise(function(resolve){ frameResolve = resolve; });
       proc.onaudioprocess = function(ev){
@@ -618,8 +650,8 @@ var ensureMicStream = (function(){
         for(var i=0;i<d.length;i++){ buffer.buf[buffer.w] = d[i]; buffer.w = (buffer.w+1) % buffer.buf.length; }
         buffer.filled = Math.min(buffer.buf.length, buffer.filled + d.length);
       };
-      var mute = audioCtx.createGain(); mute.gain.value = 0;
-      src.connect(proc); proc.connect(mute); mute.connect(audioCtx.destination);
+      var mute = ctx.createGain(); mute.gain.value = 0;
+      src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
       preroll = buffer;
       micWarm = { stream: stream, src: src, proc: proc, mute: mute, lastFrame: Date.now(), firstFrame: firstFrame };
       return micWarm;
@@ -629,40 +661,66 @@ var ensureMicStream = (function(){
       throw error;
     }
   }
-  return function(){
-    if(!pending) pending = acquire().finally(function(){ pending = null; });
+  return function(owner){
+    owner = owner === "prewarm" ? "prewarm" : "gesture";
+    if(pending && owner === "gesture" && pendingOwner === "prewarm") cancelMicStartup();
+    if(!pending){
+      var epoch = ++pendingEpoch;
+      var request = acquire(epoch);
+      pending = request;
+      pendingOwner = owner;
+      request.then(function(){
+        if(pending === request){ pending = null; pendingOwner = ""; }
+      }, function(){
+        if(pending === request){ pending = null; pendingOwner = ""; }
+      });
+    }
     return pending;
   };
 })();
 async function prewarmMicrophone(fromGesture){
   var token = ++micPrewarmToken;
   setMicStatus("starting", "麦克风启动中…");
-  if(fromGesture) ensureAudio();
   try{
-    if(!fromGesture && navigator.permissions && navigator.permissions.query){
+    if(!fromGesture){
+      if(!navigator.permissions || !navigator.permissions.query){
+        setMicStatus("gesture", "轻点启用麦克风");
+        return;
+      }
       var permission;
-      try{ permission = await navigator.permissions.query({name:"microphone"}); }catch(e){}
+      try{ permission = await navigator.permissions.query({name:"microphone"}); }
+      catch(e){
+        if(token === micPrewarmToken && !document.hidden) setMicStatus("gesture", "轻点启用麦克风");
+        return;
+      }
       if(token !== micPrewarmToken || document.hidden) return;
-      if(permission && permission.state !== "granted"){
-        micNeedsGesture = true;
-        setMicStatus("gesture", permission.state === "denied" ? "麦克风权限未开启" : "轻点启用麦克风");
+      if(!permission || permission.state !== "granted"){
+        setMicStatus("gesture", permission && permission.state === "denied" ? "麦克风权限未开启" : "轻点启用麦克风");
+        return;
+      }
+      // Do not leave a non-gesture resume pending. iOS Safari can keep a
+      // suspended/interrupted context unresolved until it is discarded.
+      if(!audioCtx || audioCtx.state === "closed"){
+        audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+      }
+      if(audioCtx.state !== "running"){
+        resetCaptureAudio();
+        setMicStatus("gesture", "轻点启用麦克风");
         return;
       }
     }
-    if(token !== micPrewarmToken || document.hidden) return;
-    var warm = await ensureMicStream();
+    if(token !== micPrewarmToken || (!fromGesture && document.hidden)) return;
+    var warm = await ensureMicStream(fromGesture ? "gesture" : "prewarm");
     var timer;
     try{
       await Promise.race([warm.firstFrame, new Promise(function(_, reject){
         timer = setTimeout(function(){ reject(new Error("麦克风未收到音频")); }, MIC_START_TIMEOUT_MS);
       })]);
     }finally{ clearTimeout(timer); }
-    if(token !== micPrewarmToken || document.hidden) return;
-    micNeedsGesture = false;
+    if(token !== micPrewarmToken || (!fromGesture && document.hidden)) return;
     setMicStatus("ready", "麦克风已就绪");
   }catch(error){
-    if(token !== micPrewarmToken || document.hidden) return;
-    micNeedsGesture = true;
+    if(token !== micPrewarmToken || (!fromGesture && document.hidden)) return;
     if(!rec.active && !rec.releasePending && !rec.recorderObj) resetCaptureAudio();
     setMicStatus("gesture", "轻点启用麦克风");
   }
@@ -678,7 +736,7 @@ function takePrerollBefore(startW){
   return out;
 }
 async function startRecording(){
-  var warm = await ensureMicStream();
+  var warm = await ensureMicStream("gesture");
   var stream = warm.stream;
   try{
     var ctx = audioCtx; var src = ctx.createMediaStreamSource(stream);
@@ -1304,7 +1362,13 @@ function bindRecButton(btn){
   btn.addEventListener("pointerdown", function(e){
     e.preventDefault();
     if(e.isPrimary === false || (e.button !== undefined && e.button !== 0)) return;
-    if(micNeedsGesture){ prewarmMicrophone(true); return; }
+    if(micNeedsGesture){
+      rec.btn = btn;
+      rec.startY = e.clientY;
+      prewarmMicrophone(true);
+      return;
+    }
+    micPrewarmToken++;
     rec.btn = btn;
     rec.startY = e.clientY;
     try{ btn.setPointerCapture(e.pointerId); }catch(err){}
@@ -1410,7 +1474,6 @@ function submitRecording(samples, seq, lang){
 function startHold(){
   if(rec.active) return;
   cancelSpeech();
-  ensureAudio();
   var seq = ++rec.captureSeq;
   clearTimeout(rec.readyTimer); clearTimeout(rec.tailTimer);
   if(rec.recorderObj){ rec.recorderObj.stop(); rec.recorderObj = null; }
@@ -1702,7 +1765,6 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
   showResultsPage(list, toneNum);
 }
 updateHistoryUI();
-document.addEventListener("touchstart", function(){ ensureAudio(); }, {once:true});
 function suspendCapture(){
   micPrewarmToken++;
   if(rec.active || rec.releasePending || rec.recorderObj) cancelRecording();
@@ -1710,10 +1772,10 @@ function suspendCapture(){
   cancelSpeech();
   resetCaptureAudio();
 }
-document.addEventListener("visibilitychange", function(){ if(document.hidden) suspendCapture(); else prewarmMicrophone(false); });
+document.addEventListener("visibilitychange", function(){ if(document.hidden) suspendCapture(); else prewarmMicrophone(); });
 window.addEventListener("pagehide", suspendCapture);
-window.addEventListener("pageshow", function(event){ if(event.persisted) prewarmMicrophone(false); });
-prewarmMicrophone(false);
+window.addEventListener("pageshow", function(event){ if(event.persisted) prewarmMicrophone(); });
+prewarmMicrophone();
 
 // 探测现有语音服务并明确提示连接状态。
 function pingCloud(){
@@ -1772,8 +1834,11 @@ function setLookupLanguage(lang){
   if(keepHistory && typeof renderHistory === "function") renderHistory();
   var recBtn = $("recBtn");
   if(recBtn){
-    recBtn.setAttribute("aria-label", lookupLanguage === "en" ? "按住说英语" : "按住说话查字");
-    var hint = recBtn.querySelector(".hint"); if(hint) hint.textContent = lookupLanguage === "en" ? "按住说英语" : "按住说字";
+    var activationRequired = micNeedsGesture;
+    var activationText = activationRequired ? "轻点启用麦克风" : (lookupLanguage === "en" ? "按住说英语" : "按住说字");
+    var activationLabel = activationRequired ? activationText : (lookupLanguage === "en" ? "按住说英语" : "按住说话查字");
+    recBtn.setAttribute("aria-label", activationLabel);
+    var hint = recBtn.querySelector(".hint"); if(hint) hint.textContent = activationText;
   }
 }
 window.addEventListener("english-lookup-ready", function(event){
