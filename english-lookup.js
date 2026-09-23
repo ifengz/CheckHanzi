@@ -240,6 +240,7 @@
       state.result = result;
       state.resultQuery = query;
       state.resultFromSentence = !!fromSentence;
+      if(!state.skipHistory && config.onLookupCount) config.onLookupCount();
       if(!state.skipHistory && config.onHistorySave) config.onHistorySave(historyRecord(result, query));
       if(!state.skipHistory && config.onHistoryCount) config.onHistoryCount();
       return true;

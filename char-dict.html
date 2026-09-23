@@ -16,6 +16,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #home,#lookupWorkspace,#results,#detail,#history{min-height:0;display:flex;flex-direction:column;overflow:hidden;}
 #home{flex:0 0 250px;justify-content:flex-start;align-items:center;gap:14px;padding:20px 14px;overflow-y:auto;}
 #lookupWorkspace{flex:1;min-width:0;position:relative;background:#FFF8EC;}
+#lookupCounter{position:fixed;right:max(8px,env(safe-area-inset-right));bottom:max(6px,env(safe-area-inset-bottom));z-index:10;color:#B8A080;font-size:11px;line-height:1;letter-spacing:0;opacity:.45;pointer-events:none;user-select:none;}
+#lookupCounter[hidden]{display:none;}
 #lookupWorkspace > #results,#lookupWorkspace > #detail,#lookupWorkspace > #history{display:none;flex:1;min-width:0;}
 #results.show,#detail.show,#history.show{display:flex;}
 #lookupWorkspace > #results.show,#lookupWorkspace > #detail.show,#lookupWorkspace > #history.show{display:flex;}
@@ -301,6 +303,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 </div>
 
 <div id="toast"></div>
+<div id="lookupCounter" hidden aria-label="查找次数"></div>
 
 <div id="loadOverlay">
   <div class="logo">字</div>
@@ -681,6 +684,7 @@ var ensureMicStream = (function(){
 async function prewarmMicrophone(fromGesture){
   var token = ++micPrewarmToken;
   setMicStatus("starting", "麦克风启动中…");
+  if(fromGesture) ensureAudio();
   try{
     if(!fromGesture){
       if(!navigator.permissions || !navigator.permissions.query){
@@ -904,6 +908,18 @@ function cloudRecognize(samples, lang){
   });
 }
 function stripTone(s){ return s.toLowerCase().normalize("NFD").replace(/u\u0308/g,"v").replace(/[\u0300-\u036f]/g,""); }
+var lookupCount = 0;
+function renderLookupCounter(visible){
+  var node = $("lookupCounter"); if(!node) return;
+  var show = lookupCount > 0 && visible !== false;
+  node.textContent = lookupCount ? String(lookupCount) : "";
+  node.hidden = !show;
+  if(lookupCount) node.setAttribute("aria-label", "查找次数 " + lookupCount);
+}
+function recordLookup(){
+  lookupCount += 1;
+  renderLookupCounter();
+}
 function showWorkspace(page){
   ["results","detail","history"].forEach(function(name){
     var panel = $(name);
@@ -911,6 +927,7 @@ function showWorkspace(page){
   });
   var english = $("englishLookupRoot");
   if(english) english.hidden = page !== "english";
+  renderLookupCounter(page === "results" || page === "detail" || page === "english");
 }
 function showResultsPage(chars, toneNum, fromHistory, preserveAll){
   cancelSpeech();
@@ -1560,7 +1577,7 @@ function handleVoiceResult(text){
   var hanzi = [];
   for(var i=0;i<text2.length;i++){ var ch = text2[i]; if(/[\u4e00-\u9fff]/.test(ch) && hanzi.indexOf(ch)===-1) hanzi.push(ch); }
   // 一句话（≥2 个汉字）→ 原样显示整句，孩子点句子里任意字查详情
-  if(hanzi.length >= 2){ showSentenceMode(text2); return; }
+  if(hanzi.length >= 2){ recordLookup(); showSentenceMode(text2); return; }
   // 单个字 → 查它 + 同音字扩展（识别成同音错字时，孩子仍能在候选里找到想查的字）
   if(hanzi.length === 1){ showVoiceResults(expandHomophones(hanzi[0], toneNum), text, toneNum, true); return; }
   // 纯拼音兜底（含带声调拼音 hào）
@@ -1759,6 +1776,7 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
   var limit = (isPinyinOnly || forceWide) ? 14 : 3;
   var list = chars.filter(function(c){ return DICT[c]; }).slice(0,limit);
   if(!list.length){ toast("字库里还没有这个字"); return; }
+  recordLookup();
   var echo = $("voiceEcho");
   if(rawText){ echo.style.display = "block"; $("voiceEchoTxt").textContent = rawText; }
   $("rSub").textContent = toneNum ? "点一下就能看笔顺和部首（第"+toneNum+"声）" : "点一下就能看笔顺和部首";
@@ -1854,6 +1872,7 @@ window.addEventListener("english-lookup-ready", function(event){
     isEnglish: function(){ return lookupLanguage === "en"; },
     onLanguageChange: setLookupLanguage,
     onHistorySave: saveEnglishRecord,
+    onLookupCount: recordLookup,
     onHistoryBack: returnFromEnglishHistory
   });
   englishLookupController.setLanguage("zh");

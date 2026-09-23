@@ -17,6 +17,23 @@ for (const [name, source] of [['english-lookup.js', englishScript], ['lucide-ico
 assert.doesNotMatch(html, /<input\b/i, 'voice-only lookup must not retain an input element');
 assert.doesNotMatch(englishScript, /config\.input|english-submit|searchInput/, 'English lookup must not depend on typed entry');
 assert.match(html, /#recBtn\{[^}]*touch-action:none/, 'record button must reserve touch gestures for recording');
+assert.match(html, /id="lookupCounter"/, 'lookup results must expose the unobtrusive lookup counter');
+assert.match(html, /#lookupCounter\{[^}]*position:fixed[^}]*right:[^}]*bottom:/, 'lookup counter must stay in the lower-right corner');
+
+const lookupCounterStart = html.indexOf('var lookupCount = 0;');
+const lookupCounterEnd = html.indexOf('function showWorkspace(', lookupCounterStart);
+assert.ok(lookupCounterStart >= 0 && lookupCounterEnd > lookupCounterStart, 'lookup counter state must be defined before workspace rendering');
+const counterNode = { hidden:true, textContent:'', setAttribute() {} };
+const counterContext = vm.createContext({ $: id => id === 'lookupCounter' ? counterNode : null });
+vm.runInContext(html.slice(lookupCounterStart, lookupCounterEnd), counterContext);
+counterContext.recordLookup();
+assert.equal(counterNode.textContent, '1', 'first lookup must display count 1');
+assert.equal(counterNode.hidden, false, 'counter must be visible after a lookup');
+counterContext.recordLookup();
+assert.equal(counterNode.textContent, '2', 'each new lookup must increment the counter');
+const voiceResultStart = html.indexOf('function handleVoiceResult(');
+const voiceResultEnd = html.indexOf('// 声调工具', voiceResultStart);
+assert.match(html.slice(voiceResultStart, voiceResultEnd), /showSentenceMode\(text2\);[\s\S]*recordLookup\(\)|recordLookup\(\)[\s\S]*showVoiceResults/, 'Chinese successful lookup branches must record one count');
 
 const start = html.indexOf('function resample(');
 const end = html.indexOf('function floatToWav(', start);
@@ -407,8 +424,11 @@ function prewarmHarness(permission = 'granted') {
 {
   const h = prewarmHarness();
   h.capture.navigator.permissions.query = async () => { throw new Error('unsupported'); };
+  let audioWakeCalls = 0;
+  h.capture.ensureAudio = () => { audioWakeCalls++; };
   const pending = h.capture.prewarmMicrophone(true);
   await new Promise(resolve => setImmediate(resolve));
+  assert.equal(audioWakeCalls, 1, 'the first activation tap must wake AudioContext synchronously before async startup');
   h.feed(h.capture.micWarm.proc, 0.01);
   await pending;
   assert.equal(h.counts().requested, 1, 'the activation tap must request the microphone without another permission query');
@@ -840,6 +860,7 @@ const englishResponses = [
 const englishRequests = [];
 const englishHistoryRecords = [];
 let englishHistoryCount = 0;
+let englishLookupCount = 0;
 let englishHistoryBacks = 0;
 let createEnglishLookup;
 class TestCustomEvent { constructor(_name, init) { this.detail = init.detail; } }
@@ -880,6 +901,7 @@ const englishController = createEnglishLookup({
   onLanguageChange() {},
   onHistorySave: record => englishHistoryRecords.push(record),
   onHistoryCount: () => { englishHistoryCount++; },
+  onLookupCount: () => { englishLookupCount++; },
   onHistoryBack: () => { englishHistoryBacks++; },
   prefetchTTS: () => Promise.resolve(),
   speak() {},
@@ -888,6 +910,7 @@ englishController.handleRecognition('I like apples.');
 await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(englishRequests[0], { url:'/api/english', body:{ text:'I like apples.' } }, 'recognized sentence must be sent unchanged');
 assert.equal(englishHistoryRecords.length, 1, 'successful English sentence must notify history exactly once');
+assert.equal(englishLookupCount, 1, 'successful English sentence must increment the lookup counter');
 assert.deepEqual({ ...englishHistoryRecords[0], t:undefined }, {
   query:'I like apples.', kind:'sentence', translation:'我喜欢苹果。', source:{ name:'MyMemory', url:'https://mymemory.translated.net/' }, t:undefined,
 }, 'sentence history must retain the result needed for offline history rendering');
@@ -900,6 +923,7 @@ await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(englishRequests[1], { url:'/api/english', body:{ text:'apples' } }, 'selected sentence word must be sent as the dictionary query');
 assert.equal(findByClass(englishRoot, 'english-word').textContent, 'apples', 'sentence token must load its word result');
 assert.equal(englishHistoryRecords.length, 2, 'successful English word must notify history');
+assert.equal(englishLookupCount, 2, 'selecting a sentence word must increment the lookup counter');
 assert.deepEqual({ ...englishHistoryRecords[1], t:undefined }, {
   query:'apples', kind:'word', word:'apples', phonetic:"'æplz", meanings:[{ partOfSpeech:'n.', translation:'苹果' }], source:{ name:'ECDICT', url:'https://github.com/skywind3000/ECDICT' }, t:undefined,
 }, 'word history must retain its displayed dictionary data');
@@ -913,6 +937,7 @@ await new Promise(resolve => setImmediate(resolve));
 assert.deepEqual(englishRequests[2], { url:'/api/english', body:{ text:'apples' } }, 'failed dictionary query must preserve the selected word');
 assert.ok(findByClass(englishRoot, 'english-error'), 'failed word query must display an error');
 assert.equal(englishHistoryRecords.length, 2, 'failed English lookup must not create history');
+assert.equal(englishLookupCount, 2, 'failed English lookup must not increment the lookup counter');
 findByClass(englishRoot, 'english-back').click();
 assert.ok(findByClass(englishRoot, 'english-sentence'), 'error back must restore the recognized sentence');
 
@@ -920,6 +945,7 @@ englishResponses.push({ ok:true, json: async () => ({ kind:'word', word:'apple',
 englishController.lookup('apple', false, true);
 await new Promise(resolve => setImmediate(resolve));
 assert.equal(englishHistoryRecords.length, 2, 'reopening an English history record must not save it again or reorder the list');
+assert.equal(englishLookupCount, 2, 'reopening an English history record must not increment the lookup counter');
 const historyBack = findByAttribute(englishRoot, 'aria-label', '返回历史');
 assert.ok(historyBack, 'history-opened English result must provide a return control');
 historyBack.click();
