@@ -35,6 +35,10 @@ for (const rate of [16000, 22050, 44100, 48000]) {
 }
 const highTone = Float32Array.from({ length: 48000 }, (_, index) => Math.sin(2 * Math.PI * 10000 * index / 48000));
 assert.ok(rms(context.resample(highTone, 48000, 16000)) < 0.02, 'Suppress above-Nyquist energy before downsampling');
+for (const rate of [22050, 44100]) {
+  const tone = Float32Array.from({ length: rate }, (_, index) => Math.sin(2 * Math.PI * 10000 * index / rate));
+  assert.ok(rms(context.resample(tone, rate, 16000)) < 0.02, `${rate}: preserve anti-aliasing at fractional ratios`);
+}
 const toneStart = html.indexOf('function stripTone(');
 const toneEnd = html.indexOf('function showWorkspace(', toneStart);
 vm.runInContext(html.slice(toneStart, toneEnd), context);
@@ -109,7 +113,7 @@ const runAsr = (lang = 'zh') => {
 }
 
 const submitStart = html.indexOf('function submitRecording(');
-const submitEnd = html.indexOf('function scheduleAutoCapture(', submitStart);
+const submitEnd = html.indexOf('function startHold(', submitStart);
 const submitEvents = [];
 const submitContext = vm.createContext({
   Float32Array,
@@ -183,7 +187,7 @@ function captureHarness(state = 'running', immediateMicTimeout = false) {
     state, sampleRate: 16000, destination: {},
     async resume() { resumed++; this.state = 'running'; },
     createMediaStreamSource: node,
-    createScriptProcessor() { const proc = node(); processors.push(proc); return proc; },
+    createScriptProcessor(bufferSize = 4096) { const proc = node(); proc.bufferSize = bufferSize; processors.push(proc); return proc; },
     createGain() { return { ...node(), gain: { value: 1 } }; },
   };
   const timer = immediateMicTimeout
@@ -203,7 +207,7 @@ function captureHarness(state = 'running', immediateMicTimeout = false) {
     } } },
   });
   vm.runInContext(html.slice(captureStart, captureEnd), capture);
-  const feed = (proc, value) => proc.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(value) } });
+  const feed = (proc, value) => proc.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(proc.bufferSize || 4096).fill(value) } });
   return { capture, audio, streams, processors, constraints, feed, counts: () => ({ requested, resumed }) };
 }
 {
@@ -302,14 +306,13 @@ for (const broken of ['ended', 'muted', 'disabled']) {
     resolveMic = async () => resolve(await acquire());
   });
   const holdEvents = [];
-  const label = {};
   const holdContext = h.capture;
   Object.assign(holdContext, {
     Date,
     Promise,
     rec: {
-      active: false, autoMode: false, cancelled: false, captureSeq: 0,
-      btn: { id: 'recBtn', querySelector: () => label, classList: { add() {}, remove() {} } },
+      active: false, cancelled: false, captureSeq: 0,
+      btn: { id: 'recBtn', classList: { add() {}, remove() {} } },
     },
     cloudASR: true,
     lookupLanguage: 'zh',
@@ -318,27 +321,24 @@ for (const broken of ['ended', 'muted', 'disabled']) {
     stopWave() {},
     toast: message => holdEvents.push(['toast', message]),
     submitRecording: (samples, seq, lang) => holdEvents.push(['submit', samples.length, seq, lang]),
-    scheduleAutoCapture: () => holdEvents.push(['auto']),
   });
   const holdStart = html.indexOf('function startHold(');
   const holdEnd = html.indexOf('function startWave(', holdStart);
   vm.runInContext(html.slice(holdStart, holdEnd), holdContext);
   holdContext.startHold();
-  holdContext.rec.startTime = Date.now() - 1000;
   holdContext.endHold();
   assert.equal(holdContext.rec.releasePending, true, 'early release must wait for microphone initialization');
   assert.deepEqual(holdEvents.filter(event => event[0] === 'toast'), [], 'early release must not report a false silent capture');
-  assert.equal(label.textContent, '麦克风启动中…');
+  assert.ok(holdEvents.some(event => event[0] === 'state' && event[1] === 'starting'), 'released startup must remain visibly pending until audio arrives');
   await resolveMic();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(holdContext.rec.captureReady, false, 'creating nodes is not proof of actual audio delivery');
   assert.equal(holdEvents.some(event => event[0] === 'submit'), false);
   h.feed(holdContext.rec.recorderObj.proc, 0.1);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(label.textContent, '请说话…');
-  assert.deepEqual(holdEvents.filter(event => event[0] === 'auto'), [['auto']], 'early release must leave a recording window after actual capture starts');
-  assert.equal(holdEvents.some(event => event[0] === 'submit'), false, 'never immediately stop a newly ready recording');
-  assert.ok(holdContext.rec.recorderObj.stop().length > 0);
+  assert.equal(holdContext.rec.captureReady, true);
+  assert.equal(holdContext.rec.releasePending, false, 'ready recorder must finish the released capture');
+  assert.deepEqual(holdEvents.filter(event => event[0] === 'submit'), [['submit', 2048, 1, 'zh']], 'ready recorder must submit immediately without another recording window');
   h.capture.releaseMicStream();
 }
 {
@@ -412,45 +412,79 @@ function holdHarness() {
   const h = captureHarness();
   const events = [], timers = new Map();
   let timerId = 0;
-  const label = {};
   Object.assign(h.capture, {
-    rec: { active:false, autoMode:false, captureSeq:0, btn:{ id:'recBtn', querySelector:() => label, classList:{ add(){}, remove(){} } } },
-    lookupLanguage:'zh', cancelSpeech(){}, stopWave(){},
+    rec: { active:false, captureSeq:0, btn:{ id:'recBtn', classList:{ add(){}, remove(){} } } },
+    lookupLanguage:'zh', cancelSpeech(){}, ensureAudio(){}, stopWave(){},
     setRecState: mode => events.push(['state', mode]),
     toast: message => events.push(['toast', message]),
     setTimeout: (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; },
     clearTimeout: id => timers.delete(id),
     submitRecording: samples => events.push(['submit', samples.length]),
   });
-  vm.runInContext(html.slice(html.indexOf('function cancelAutoRec('), html.indexOf('function submitRecording(')), h.capture);
-  vm.runInContext(html.slice(html.indexOf('function scheduleAutoCapture('), waveStart), h.capture);
+  vm.runInContext(html.slice(html.indexOf('function cancelRecording('), html.indexOf('function submitRecording(')), h.capture);
+  vm.runInContext(html.slice(html.indexOf('function startHold('), waveStart), h.capture);
   const flush = () => new Promise(resolve => setImmediate(resolve));
   const fire = delay => {
     const found = [...timers].find(([, timer]) => timer.delay === delay);
     assert.ok(found, 'expected timer ' + delay);
     timers.delete(found[0]); found[1].callback();
   };
-  return { ...h, events, timers, label, flush, fire };
+  return { ...h, events, timers, flush, fire };
+}
+{
+  const h = holdHarness();
+  h.capture.startHold(); await h.flush();
+  const recorder = h.capture.rec.recorderObj;
+  assert.equal(recorder.proc.bufferSize, 2048, 'capture must use a smaller frame for responsive finalization');
+  assert.equal(recorder.frameDurationMs, 128, 'capture must expose its actual frame duration');
+  h.feed(recorder.proc, 0.02); await h.flush();
+  h.capture.endHold();
+  assert.equal(h.events.some(event => event[0] === 'submit'), false, 'release must wait for queued final audio frames');
+  assert.ok([...h.timers.values()].some(timer => timer.delay === 148), 'release must wait one frame plus a small scheduling margin, not a fixed tail');
+  h.feed(recorder.proc, 0.03);
+  h.fire(148);
+  assert.deepEqual(h.events.filter(event => event[0] === 'submit'), [['submit', 4096]], 'release must retain final frame');
+  assert.equal(h.timers.size, 0);
+  h.capture.releaseMicStream();
+}
+{
+  const h = holdHarness();
+  h.audio.sampleRate = 48000;
+  h.capture.startHold(); await h.flush();
+  const recorder = h.capture.rec.recorderObj;
+  h.feed(recorder.proc, 0.02); await h.flush();
+  h.capture.endHold();
+  assert.ok([...h.timers.values()].some(timer => timer.delay === 63), 'higher-rate capture must use its shorter actual frame duration');
+  h.capture.cancelRecording();
+  h.capture.releaseMicStream();
 }
 {
   const h = holdHarness();
   h.capture.startHold(); await h.flush();
   const recorder = h.capture.rec.recorderObj;
   h.feed(recorder.proc, 0.02); await h.flush();
-  h.capture.rec.startTime = Date.now() - 1000;
   h.capture.endHold();
-  assert.equal(h.events.some(event => event[0] === 'submit'), false, 'release must wait for queued final audio frames');
-  h.feed(recorder.proc, 0.03);
-  h.fire(300);
-  assert.deepEqual(h.events.filter(event => event[0] === 'submit'), [['submit', 8192]], 'release must retain final frame');
-  assert.equal(h.timers.size, 0);
+  const history = { classList: { contains: () => false } };
+  Object.assign(h.capture, {
+    $: name => name === 'history' ? history : (name === 'recBtn' ? { setAttribute() {}, querySelector: () => null } : null),
+    closeHistoryConfirm() {},
+    showWorkspace() {},
+    updateHistoryUI() {},
+    renderHistory() {},
+  });
+  const languageStart = html.indexOf('function setLookupLanguage(');
+  const languageEnd = html.indexOf('window.addEventListener("english-lookup-ready"', languageStart);
+  vm.runInContext(html.slice(languageStart, languageEnd), h.capture);
+  h.capture.setLookupLanguage('en');
+  assert.equal(recorder.proc.onaudioprocess, null, 'language switch during the tail must stop the old recorder');
+  assert.equal(h.capture.rec.recorderObj, null, 'language switch must release the recorder reference');
+  assert.equal([...h.timers.values()].some(timer => timer.delay === 148), false, 'language switch must cancel pending tail submission');
   h.capture.releaseMicStream();
 }
 {
   const h = holdHarness();
   h.capture.startHold(); await h.flush();
   const first = h.capture.rec.recorderObj;
-  h.capture.rec.startTime = Date.now() - 1000;
   h.capture.endHold();
   h.capture.startHold(); await h.flush();
   assert.equal(first.proc.onaudioprocess, null, 'repress during startup must disconnect the old recorder');
@@ -458,7 +492,7 @@ function holdHarness() {
   assert.notEqual(first, second);
   h.feed(second.proc, 0.02); await h.flush();
   assert.equal(h.capture.rec.captureReady, true);
-  h.capture.cancelAutoRec(); await h.flush();
+  h.capture.cancelRecording(); await h.flush();
   assert.equal(h.timers.size, 0);
   assert.equal(h.events.some(event => event[0] === 'submit'), false);
   h.capture.releaseMicStream();
@@ -468,24 +502,26 @@ function holdHarness() {
   h.capture.startHold(); await h.flush();
   const first = h.capture.rec.recorderObj;
   h.feed(first.proc, 0.02); await h.flush();
-  h.capture.rec.startTime = Date.now() - 1000;
   h.capture.endHold();
   h.capture.startHold(); await h.flush();
   assert.notEqual(h.capture.rec.recorderObj, first, 'a new press during the audio tail must start a new recording');
   assert.equal(first.proc.onaudioprocess, null);
-  assert.equal([...h.timers.values()].some(timer => timer.delay === 300), false, 'the old tail must not submit into the new recording');
-  h.capture.cancelAutoRec(); await h.flush();
+  assert.equal([...h.timers.values()].some(timer => timer.delay === 148), false, 'the old tail must not submit into the new recording');
+  h.capture.cancelRecording(); await h.flush();
   assert.equal(h.timers.size, 0);
   h.capture.releaseMicStream();
 }
 {
   const h = holdHarness();
   h.capture.startHold(); await h.flush();
+  const recorder = h.capture.rec.recorderObj;
+  h.feed(recorder.proc, 0.02); await h.flush();
   h.capture.endHold();
-  assert.equal(h.capture.rec.autoMode, true);
-  assert.equal([...h.timers.values()].some(timer => timer.delay === 3000), false, 'quick tap must not count down before real frames');
-  h.feed(h.capture.rec.recorderObj.proc, 0.02); await h.flush();
-  h.fire(3000);
+  assert.equal(h.capture.rec.active, false, 'short press must finish the recording on release');
+  assert.equal([...h.timers.values()].some(timer => timer.delay === 3000), false, 'short press must not wait a fixed three seconds');
+  assert.ok([...h.timers.values()].some(timer => timer.delay === 148), 'short press must only wait for the final audio frame');
+  h.feed(recorder.proc, 0.03);
+  h.fire(148);
   assert.equal(h.events.filter(event => event[0] === 'submit').length, 1);
   h.capture.releaseMicStream();
 }
@@ -540,8 +576,8 @@ const bindEnd = html.indexOf('\nbindRecButton($("recBtn"))', bindStart);
 const listeners = {};
 const moveModes = [];
 const bindContext = vm.createContext({
-  rec: { autoMode: false, active: true, cancelled: false, startY: 100 },
-  cancelAutoRec: () => { throw new Error('auto capture should not be used'); },
+  rec: { active: true, cancelled: false, startY: 100 },
+  cancelRecording: () => { throw new Error('pointercancel should not call cancellation twice'); },
   setRecState: mode => moveModes.push(mode),
   endHold: () => { assert.equal(bindContext.rec.cancelled, true, 'pointercancel must mark the capture cancelled'); },
 });
@@ -557,8 +593,8 @@ const languageStart = html.indexOf('function setLookupLanguage(');
 const languageEnd = html.indexOf('window.addEventListener("english-lookup-ready"', languageStart);
 const languageWorkspaceHistory = { classList: { contains: () => false } };
 const languageContext = vm.createContext({
-  rec: { captureSeq:9, active:false, autoMode:false },
-  cancelSpeech() {}, cancelAutoRec() {}, setRecState() {}, showWorkspace: page => { languageContext.workspace = page; },
+  rec: { captureSeq:9, active:false },
+  cancelSpeech() {}, cancelRecording() {}, setRecState() {}, showWorkspace: page => { languageContext.workspace = page; },
   $: name => name === 'history' ? languageWorkspaceHistory : (name === 'recBtn' ? { setAttribute() {}, querySelector: () => null } : null),
 });
 vm.runInContext(html.slice(languageStart, languageEnd), languageContext);
