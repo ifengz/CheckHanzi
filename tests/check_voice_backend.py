@@ -2,13 +2,17 @@
 """Backend voice contract checks. The integration case uses real Edge TTS audio."""
 
 import asyncio
+import base64
 import importlib.util
 import io
+import json
 import pathlib
 import os
 import math
+import ssl
 import sys
 import tempfile
+import types
 import unittest
 import wave
 from unittest.mock import patch
@@ -26,14 +30,31 @@ server_voice = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(server_voice)
 
 
-def recording(sample):
+def recording(sample, sample_rate=16000):
     output = io.BytesIO()
     with wave.open(output, "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
-        wav.setframerate(16000)
+        wav.setframerate(sample_rate)
         wav.writeframes(sample.to_bytes(2, "little", signed=True) * 3200)
     return output.getvalue()
+
+
+class FakeWebSocket:
+    def __init__(self, responses):
+        self.responses = iter(responses)
+
+    def send(self, _payload):
+        pass
+
+    def recv(self):
+        response = next(self.responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def close(self):
+        pass
 
 
 def quiet_tone_recording(amplitude=0.01):
@@ -101,6 +122,60 @@ class VoiceBackendContractTest(unittest.TestCase):
             )
             self.assertEqual(response.status_code, 400)
             recognize.assert_not_called()
+
+    def test_unsafe_sample_rate_never_reaches_a_recognizer(self):
+        with patch.object(server_voice, "recognize") as recognize:
+            response = server_voice.app.test_client().post(
+                "/api/asr?lang=zh", data=recording(1, sample_rate=1), content_type="audio/wav",
+            )
+            self.assertEqual(response.status_code, 400)
+            recognize.assert_not_called()
+
+    def test_xfyun_partial_text_without_final_frame_falls_back(self):
+        partial_text = base64.b64encode(json.dumps({
+            "ws": [{"cw": [{"w": "半句"}]}],
+        }).encode("utf-8")).decode("ascii")
+        websocket = FakeWebSocket([
+            json.dumps({
+                "header": {"code": 0, "status": 1},
+                "payload": {"result": {"status": 1, "text": partial_text}},
+            }),
+            TimeoutError("connection closed before final result"),
+        ])
+        module = types.SimpleNamespace(create_connection=lambda *_args, **_kwargs: websocket)
+        with patch.dict(sys.modules, {"websocket": module}), \
+             patch.object(server_voice, "XFYUN_ENABLED", True), \
+             patch.object(server_voice, "XFYUN_APP_ID", "app"), \
+             patch.object(server_voice, "XFYUN_API_KEY", "key"), \
+             patch.object(server_voice, "XFYUN_API_SECRET", "secret"), \
+             patch.object(server_voice, "ASR_ENGINE", "sensevoice"), \
+             patch.object(server_voice, "sensevoice_asr", return_value=("完整结果", 1.0)):
+            self.assertEqual(
+                server_voice.recognize(recording(1), "zh"),
+                ("完整结果", "sensevoice", 1.0),
+            )
+
+    def test_xfyun_connection_keeps_tls_certificate_verification(self):
+        connection_options = {}
+
+        def connect(*_args, **kwargs):
+            connection_options.update(kwargs)
+            return FakeWebSocket([json.dumps({
+                "header": {"code": 0, "status": 2},
+                "payload": {},
+            })])
+
+        module = types.SimpleNamespace(create_connection=connect)
+        with patch.dict(sys.modules, {"websocket": module}), \
+             patch.object(server_voice, "XFYUN_ENABLED", True), \
+             patch.object(server_voice, "XFYUN_APP_ID", "app"), \
+             patch.object(server_voice, "XFYUN_API_KEY", "key"), \
+             patch.object(server_voice, "XFYUN_API_SECRET", "secret"):
+            server_voice.xfyun_asr(recording(1))
+        self.assertNotEqual(
+            connection_options.get("sslopt", {}).get("cert_reqs"),
+            ssl.CERT_NONE,
+        )
 
     def test_invalid_language_rejected_without_tts_generation(self):
         response = server_voice.app.test_client().get("/api/tts?text=apple&lang=fr")

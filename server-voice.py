@@ -115,7 +115,11 @@ def postprocess_en(text: str) -> str:
 def wav_bytes_to_samples(wav_bytes: bytes):
     """前端上传的 WAV → (float32 samples, 采样率)"""
     with wave.open(io.BytesIO(wav_bytes), "rb") as w:
+        if w.getnchannels() != 1 or w.getsampwidth() != 2:
+            raise ValueError("仅支持单声道 16 位 PCM 音频")
         sr = w.getframerate()
+        if sr < 8000 or sr > 96000:
+            raise ValueError("音频采样率无效")
         data = w.readframes(w.getnframes())
     return np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0, sr
 
@@ -153,7 +157,7 @@ def xfyun_asr(wav_bytes: bytes):
     """讯飞中英识别大模型（iat.xf-yun.com/v1 免费包）。返回 (文本, 时长秒)；失败返回 (None, 0.0) 由调用方回退"""
     if not XFYUN_ENABLED:
         return None, 0.0
-    import base64, hashlib, hmac, json, ssl
+    import base64, hashlib, hmac, json
     from email.utils import formatdate
     try:
         import websocket
@@ -187,7 +191,7 @@ def xfyun_asr(wav_bytes: bytes):
     frame_size = 1280
     chunks = [pcm[i:i + frame_size] for i in range(0, len(pcm), frame_size)]
     text_parts = []
-    ws = websocket.create_connection(url, timeout=10, sslopt={"cert_reqs": ssl.CERT_NONE})
+    ws = websocket.create_connection(url, timeout=10)
     try:
         seq = 0
         for i, chunk in enumerate(chunks):
@@ -230,7 +234,7 @@ def xfyun_asr(wav_bytes: bytes):
             if header.get("status") == 2 or (result and result.get("status") == 2):
                 got_final = True
                 break
-        if not got_final and not text_parts:
+        if not got_final:
             raise RuntimeError("讯飞未返回最终结果（超时）")
     finally:
         try:
