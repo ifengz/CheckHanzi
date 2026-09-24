@@ -39,6 +39,6 @@ node .github/scripts/check-dictionary.mjs
 
 ## 发布
 
-推送前执行 `doc/deploy.md` 的检查。现有 GitHub Actions 将 `main` 部署到宝塔站点；语音供应商和服务器配置不由本次页面优化改变。
+推送前执行 `doc/deploy.md` 的检查。现有 GitHub Actions 将 `deploy` 分支部署到宝塔站点；其他功能分支先通过 PR 合并到 `deploy`。语音供应商和服务器配置不由本次页面优化改变。
 
 发布后核对工作流对应提交、线上文件哈希、真实音频响应和页面操作，不能仅凭健康接口判断完整体验通过。
