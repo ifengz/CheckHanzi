@@ -563,9 +563,11 @@ var micWarm = null;            // {stream, src, proc, mute} 常驻
 var preroll = null;            // {buf, w, filled} buf 长度按实际采样率 1 秒，创建时定
 var PREROLL_MS = 350;          // 实际拼接的前置时长
 var MIC_START_TIMEOUT_MS = 5000;
+var MIC_PERMISSION_TIMEOUT_MS = 30000;
 var micGeneration = 0;
 var micPrewarmToken = 0;
 var micNeedsGesture = false;
+var micActivationPending = false;
 var cancelMicStartup = function(){};
 function setMicActivationRequired(required){
   micNeedsGesture = required;
@@ -614,10 +616,11 @@ var ensureMicStream = (function(){
     pending = null;
     pendingOwner = "";
   };
-  function waitFor(promise, message, code){
+  function waitFor(promise, message, code, timeoutMs){
+    timeoutMs = typeof timeoutMs === "number" ? timeoutMs : MIC_START_TIMEOUT_MS;
     var timer = 0;
     var timeout = new Promise(function(_, reject){
-      timer = setTimeout(function(){ var error = new Error(message); error.code = code || "startup_timeout"; reject(error); }, MIC_START_TIMEOUT_MS);
+      timer = setTimeout(function(){ var error = new Error(message); error.code = code || "startup_timeout"; reject(error); }, timeoutMs);
     });
     return Promise.race([promise, timeout]).finally(function(){ clearTimeout(timer); });
   }
@@ -653,7 +656,7 @@ var ensureMicStream = (function(){
     var timedOut = false;
     var stream;
     try{
-      stream = await waitFor(request, "麦克风权限启动超时，请检查浏览器权限后再试", "mic_request_timeout");
+      stream = await waitFor(request, "麦克风权限启动超时，请检查浏览器权限后再试", "mic_request_timeout", MIC_PERMISSION_TIMEOUT_MS);
     }catch(error){
       timedOut = error && error.code === "mic_request_timeout";
       if(timedOut) request.then(function(lateStream){
@@ -706,7 +709,9 @@ var ensureMicStream = (function(){
   };
 })();
 async function prewarmMicrophone(fromGesture){
+  if(fromGesture && micActivationPending) return;
   var token = ++micPrewarmToken;
+  if(fromGesture) micActivationPending = true;
   setMicStatus("starting", "麦克风启动中…");
   if(fromGesture) ensureAudio();
   try{
@@ -750,7 +755,12 @@ async function prewarmMicrophone(fromGesture){
   }catch(error){
     if(token !== micPrewarmToken || (!fromGesture && document.hidden)) return;
     if(!rec.active && !rec.releasePending && !rec.recorderObj) resetCaptureAudio();
-    setMicStatus("gesture", "轻点启用麦克风");
+    if(error && error.name === "NotAllowedError") setMicStatus("gesture", "请在浏览器提示中允许麦克风");
+    else if(error && error.name === "NotFoundError") setMicStatus("gesture", "没有找到麦克风，请检查设备");
+    else if(error && error.code === "mic_request_timeout") setMicStatus("gesture", "麦克风权限等待超时，请在浏览器提示中允许麦克风后再试");
+    else setMicStatus("gesture", "轻点启用麦克风");
+  }finally{
+    if(fromGesture && token === micPrewarmToken) micActivationPending = false;
   }
 }
 function takePrerollBefore(startW){
@@ -1407,7 +1417,7 @@ function bindRecButton(btn){
     if(micNeedsGesture){
       rec.btn = btn;
       rec.startY = e.clientY;
-      prewarmMicrophone(true);
+      if(!micActivationPending) prewarmMicrophone(true);
       return;
     }
     micPrewarmToken++;

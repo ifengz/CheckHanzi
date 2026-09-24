@@ -264,7 +264,9 @@ def _make_sensevoice(language):
         model=SV_MODEL_PATH,
         tokens=SV_TOKENS_PATH,
         num_threads=min(4, os.cpu_count() or 2),
-        use_itn=True,
+        # English number words must keep their word boundaries for lookup
+        # (otherwise SenseVoice can turn "five six" into "56").
+        use_itn=(language != "en"),
         language=language,
     )
 

@@ -247,7 +247,7 @@ function captureHarness(state = 'running', immediateMicTimeout = false) {
     createGain() { return { ...node(), gain: { value: 1 } }; },
   };
   const timer = immediateMicTimeout
-    ? (callback, delay) => delay === 5000 ? (callback(), 1) : setTimeout(callback, delay)
+    ? (callback, delay) => (delay === 5000 || delay === 30000) ? (callback(), 1) : setTimeout(callback, delay)
     : setTimeout;
   const capture = vm.createContext({
     Float32Array, window: { AudioContext: function() { return audio; } },
@@ -475,6 +475,27 @@ function prewarmHarness(permission = 'granted') {
   assert.equal(h.capture.micNeedsGesture, false, 'successful activation must return to hold-to-talk mode');
   assert.equal(h.button.activation, false, 'successful activation must restore the normal button color');
   assert.equal(h.hint.textContent, '按住说字', 'successful activation must restore the hold-to-talk label');
+  h.capture.releaseMicStream();
+}
+{
+  const h = prewarmHarness();
+  const acquire = h.capture.navigator.mediaDevices.getUserMedia;
+  let resolvePermission;
+  h.capture.navigator.mediaDevices.getUserMedia = () => new Promise(resolve => {
+    resolvePermission = async () => resolve(await acquire());
+  });
+  const timers = [];
+  h.capture.setTimeout = (callback, delay) => { timers.push({ callback, delay }); return timers.length; };
+  h.capture.clearTimeout = () => {};
+  const pending = h.capture.prewarmMicrophone(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.capture.micActivationPending, true, 'activation must stay busy while the browser permission prompt is open');
+  assert.ok(timers.some(timer => timer.delay >= 30000), 'permission prompt must not be discarded by the five-second audio timeout');
+  await resolvePermission();
+  await new Promise(resolve => setImmediate(resolve));
+  h.feed(h.capture.micWarm.proc, 0.01);
+  await pending;
+  assert.equal(h.capture.micActivationPending, false, 'successful permission activation must clear the busy state');
   h.capture.releaseMicStream();
 }
 {
@@ -768,10 +789,30 @@ listeners.pointercancel({ preventDefault() {} });
 assert.equal(listeners.pointermove, undefined, 'ordinary finger movement must not cancel an active recording');
 assert.deepEqual(moveModes, [], 'ordinary finger movement must not cancel an active recording');
 {
+  const activationListeners = {};
+  let activationCalls = 0;
+  const activationContext = vm.createContext({
+    micNeedsGesture: true,
+    micActivationPending: false,
+    rec: { active: false, cancelled: false, startY: 0 },
+    prewarmMicrophone: () => { activationCalls++; activationContext.micActivationPending = true; },
+    endHold() {},
+  });
+  vm.runInContext(html.slice(bindStart, bindEnd), activationContext);
+  activationContext.bindRecButton({
+    addEventListener: (name, handler) => { activationListeners[name] = handler; },
+  });
+  const activationEvent = { preventDefault() {}, isPrimary: true, button: 0, clientY: 100 };
+  activationListeners.pointerdown(activationEvent);
+  activationListeners.pointerdown(activationEvent);
+  assert.equal(activationCalls, 1, 'repeated activation taps must share one pending permission request');
+}
+{
   const events = [];
   const firstPressListeners = {};
   const firstPressContext = vm.createContext({
     micPrewarmToken: 0,
+    micActivationPending: false,
     rec: { active:false, cancelled:false, startY:0 },
     micNeedsGesture: true,
     prewarmMicrophone: () => events.push('enable'),
