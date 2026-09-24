@@ -264,7 +264,9 @@ def _make_sensevoice(language):
         model=SV_MODEL_PATH,
         tokens=SV_TOKENS_PATH,
         num_threads=min(4, os.cpu_count() or 2),
-        use_itn=True,
+        # English number words must keep their word boundaries for lookup
+        # (otherwise SenseVoice can turn "five six" into "56").
+        use_itn=(language != "en"),
         language=language,
     )
 
@@ -352,6 +354,34 @@ def _englishish(text: str) -> bool:
     letters = sum(1 for c in text if c.isascii() and c.isalpha())
     return cjk == 0 and letters >= 2
 
+
+_NUMBER_TEXT_CHARS = frozenset(
+    "0123456789零〇一二三四五六七八九十百千万亿两壹贰叁肆伍陆柒捌玖拾佰仟萬億"
+)
+
+
+def _numberish(text: str) -> bool:
+    """Return True only for a bare Arabic/Chinese number transcript.
+
+    This narrow check lets the default Chinese recognizer hand ambiguous
+    number-only audio to the English model without rerouting ordinary Chinese
+    speech.
+    """
+    value = re.sub(r"[\s,，、。.!！？?]+", "", text or "")
+    return bool(value) and all(char in _NUMBER_TEXT_CHARS for char in value)
+
+
+def _rerecognize_number_as_english(wav_bytes: bytes, text: str):
+    if not _numberish(text):
+        return None
+    try:
+        etext, edur = sensevoice_asr(wav_bytes, lang="en")
+        if etext and _englishish(etext):
+            return etext, "sensevoice-en", edur
+    except Exception as error:
+        print(f"[asr] 数字英文重认异常({error})", flush=True)
+    return None
+
 def recognize_english(wav_bytes: bytes):
     """Explicit English requests never pass through a Chinese recognizer first."""
     wav_bytes = normalize_wav(wav_bytes)
@@ -371,6 +401,9 @@ def recognize(wav_bytes: bytes, lang: str = "zh"):
             text, dur = xfyun_asr(wav_bytes)
             if text is not None:
                 if text and not _englishish(text):
+                    rerecognized = _rerecognize_number_as_english(wav_bytes, text)
+                    if rerecognized:
+                        return rerecognized
                     return text, "xfyun", dur
                 # 英文为主的结果：讯飞 zh_cn 拼写不可信（Helloeveryone 粘连），SenseVoice-en 快认（~0.4s），whisper 最后兜底
                 if text and _englishish(text):
@@ -391,6 +424,9 @@ def recognize(wav_bytes: bytes, lang: str = "zh"):
                 try:
                     stext, sdur = sensevoice_asr(wav_bytes)
                     if stext:
+                        rerecognized = _rerecognize_number_as_english(wav_bytes, stext)
+                        if rerecognized:
+                            return rerecognized
                         return stext, "sensevoice", sdur
                 except Exception as e:
                     print(f"[asr] sensevoice 补识别异常({e})", flush=True)
@@ -412,6 +448,9 @@ def recognize(wav_bytes: bytes, lang: str = "zh"):
     try:
         text, dur = sensevoice_asr(wav_bytes)
         if text is not None:
+            rerecognized = _rerecognize_number_as_english(wav_bytes, text)
+            if rerecognized:
+                return rerecognized
             return text, "sensevoice", dur
     except Exception as e:
         print(f"[asr] sensevoice 异常({e})，本次回退 whisper", flush=True)

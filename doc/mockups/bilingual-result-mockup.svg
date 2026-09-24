@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">查字宝中英文混合识别结果效果图</title>
+  <desc id="desc">横屏儿童查字页面，左侧是按住说话麦克风，右侧完整显示我想要 a red apple，并展示英文学习结果。</desc>
+  <defs>
+    <linearGradient id="mic" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff7a00"/>
+      <stop offset="1" stop-color="#ffb15b"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffdf8"/>
+      <stop offset="1" stop-color="#fff8ec"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="9" stdDeviation="15" flood-color="#2d2a26" flood-opacity=".10"/>
+    </filter>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#2d2a26" flood-opacity=".07"/>
+    </filter>
+    <style>
+      .sans{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif;}
+      .serif{font-family:"Kaiti SC","STKaiti","Songti SC",serif;}
+      .dark{fill:#2d2a26}.muted{fill:#a28d74}.orange{fill:#d96500}.teal{fill:#176476}.green{fill:#3b8b59}
+    </style>
+  </defs>
+
+  <!-- page -->
+  <rect width="1600" height="1000" fill="url(#page)"/>
+  <rect x="0" y="0" width="360" height="1000" fill="#fff8ec"/>
+  <rect x="359" y="0" width="2" height="1000" fill="#eadfce"/>
+
+  <!-- left voice panel -->
+  <g class="sans">
+    <rect x="40" y="38" width="58" height="58" rx="17" fill="url(#mic)"/>
+    <text x="69" y="79" text-anchor="middle" font-size="31" font-weight="800" fill="#fff">字</text>
+    <text x="116" y="77" font-size="29" font-weight="800" class="dark">查字宝</text>
+    <text x="180" y="128" text-anchor="middle" font-size="17" class="muted">中英文一起查</text>
+
+    <circle cx="180" cy="438" r="137" fill="#fff" opacity=".9" filter="url(#shadow)"/>
+    <circle cx="180" cy="438" r="125" fill="url(#mic)"/>
+    <rect x="158" y="373" width="44" height="110" rx="22" fill="#fff"/>
+    <path d="M141 438c0 40 17 62 39 62s39-22 39-62M180 500v34M151 534h58" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round"/>
+    <text x="180" y="603" text-anchor="middle" font-size="26" font-weight="800" fill="#fff">按住说话</text>
+    <text x="180" y="647" text-anchor="middle" font-size="16" fill="#fff" opacity=".88">中文、English 都可以</text>
+
+    <rect x="55" y="810" width="250" height="68" rx="20" fill="#fff" stroke="#f0e0c8" stroke-width="2" filter="url(#softShadow)"/>
+    <text x="180" y="853" text-anchor="middle" font-size="20" font-weight="700" class="dark">📖 查过的内容</text>
+  </g>
+
+  <!-- right content -->
+  <g class="sans">
+    <text x="420" y="72" font-size="21" font-weight="700" class="muted">识别完成</text>
+    <circle cx="550" cy="65" r="8" fill="#59ae76"/>
+    <text x="1510" y="72" text-anchor="end" font-size="17" class="muted">刚刚</text>
+
+    <!-- exact spoken sentence -->
+    <rect x="415" y="108" width="1130" height="176" rx="30" fill="#fff" stroke="#f0e0c8" stroke-width="3" filter="url(#shadow)"/>
+    <text x="455" y="153" font-size="18" font-weight="700" class="muted">你说的是</text>
+    <text x="455" y="178" font-size="14" font-weight="700" class="orange">点中文字看笔顺</text>
+    <rect x="455" y="188" width="62" height="62" rx="17" fill="#fff4e4" stroke="#ffcf95" stroke-width="2"/>
+    <rect x="526" y="188" width="62" height="62" rx="17" fill="#fff4e4" stroke="#ffcf95" stroke-width="2"/>
+    <rect x="597" y="188" width="62" height="62" rx="17" fill="#fff4e4" stroke="#ffcf95" stroke-width="2"/>
+    <text x="486" y="234" text-anchor="middle" font-size="43" font-weight="800" class="dark">我</text>
+    <text x="557" y="234" text-anchor="middle" font-size="43" font-weight="800" class="dark">想</text>
+    <text x="628" y="234" text-anchor="middle" font-size="43" font-weight="800" class="dark">要</text>
+    <text x="695" y="232" font-size="48" font-weight="800" class="teal">a red apple</text>
+    <rect x="1430" y="155" width="76" height="76" rx="23" fill="#fff4e4" stroke="#ffb66b" stroke-width="2"/>
+    <path d="M1460 183h11c7 0 12 5 12 12v10c0 7-5 12-12 12h-11c-7 0-12-5-12-12v-10c0-7 5-12 12-12zM1450 183v-6M1481 183v-6M1461 217v11" fill="none" stroke="#d96500" stroke-width="4" stroke-linecap="round"/>
+    <text x="1468" y="254" text-anchor="middle" font-size="13" font-weight="700" class="orange">重听</text>
+
+    <!-- learning result -->
+    <rect x="415" y="340" width="1130" height="515" rx="30" fill="#fff" stroke="#cfe6d5" stroke-width="3" filter="url(#softShadow)"/>
+    <rect x="415" y="340" width="12" height="515" rx="6" fill="#56a96f"/>
+    <text x="458" y="390" font-size="20" font-weight="800" class="green">English 学习结果</text>
+    <rect x="1397" y="365" width="108" height="58" rx="18" fill="#176476"/>
+    <path d="M1425 553c0-6 4-10 10-10s10 4 10 10v12c0 6-4 10-10 10s-10-4-10-10zM1418 565c0 12 7 19 17 19s17-7 17-19M1435 584v10M1425 594h20" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <text x="1480" y="402" text-anchor="middle" font-size="17" font-weight="700" fill="#fff">朗读</text>
+    <text x="458" y="485" font-size="57" font-weight="800" class="teal">a red apple</text>
+    <text x="463" y="540" font-size="27" class="muted">/ə red ˈæpəl/</text>
+    <line x1="458" y1="576" x2="1500" y2="576" stroke="#e9f0ea" stroke-width="2"/>
+    <text x="458" y="640" font-size="34" font-weight="700" class="dark">一个红苹果</text>
+    <text x="458" y="684" font-size="17" class="muted">点英文单词，可以继续看单词详情</text>
+  </g>
+
+  <!-- small footer hint -->
+  <g class="sans">
+    <text x="1515" y="946" text-anchor="end" font-size="16" class="muted">中文和 English 不用切换，都会留在同一句里</text>
+  </g>
+</svg>

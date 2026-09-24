@@ -69,6 +69,22 @@ def quiet_tone_recording(amplitude=0.01):
 
 
 class VoiceBackendContractTest(unittest.TestCase):
+    def test_sensevoice_only_uses_itn_for_chinese(self):
+        calls = []
+
+        class FakeRecognizer:
+            @staticmethod
+            def from_sense_voice(**kwargs):
+                calls.append(kwargs)
+                return object()
+
+        fake_sherpa = types.SimpleNamespace(OfflineRecognizer=FakeRecognizer)
+        with patch.dict(sys.modules, {"sherpa_onnx": fake_sherpa}), \
+             patch.object(server_voice.os.path, "exists", return_value=True):
+            server_voice._make_sensevoice("zh")
+            server_voice._make_sensevoice("en")
+        self.assertEqual([call["use_itn"] for call in calls], [True, False])
+
     def test_english_postprocess_preserves_lookup_text(self):
         self.assertEqual(
             server_voice.postprocess_en("<|en|>I have 2 apples, and a friend's book!"),
@@ -84,6 +100,28 @@ class VoiceBackendContractTest(unittest.TestCase):
             result = server_voice.recognize(b"audio", "en")
             recognize.assert_called_once_with(b"audio", lang="en")
             self.assertEqual(result, ("I like a book.", "sensevoice-en", 1.0))
+
+    def test_number_only_chinese_result_is_rechecked_in_english(self):
+        def recognize_audio(_audio, *, lang="zh"):
+            return ("eleven", 0.7) if lang == "en" else ("十一", 1.0)
+
+        with patch.object(server_voice, "normalize_wav", return_value=b"audio"), \
+             patch.object(server_voice, "XFYUN_ENABLED", True), \
+             patch.object(server_voice, "xfyun_asr", return_value=("十一", 1.0)), \
+             patch.object(server_voice, "sensevoice_asr", side_effect=recognize_audio):
+            result = server_voice.recognize(b"audio", "zh")
+        self.assertEqual(result, ("eleven", "sensevoice-en", 0.7))
+
+    def test_number_only_result_keeps_chinese_when_english_recheck_is_empty(self):
+        def recognize_audio(_audio, *, lang="zh"):
+            return ("", 0.7) if lang == "en" else ("十一", 1.0)
+
+        with patch.object(server_voice, "normalize_wav", return_value=b"audio"), \
+             patch.object(server_voice, "XFYUN_ENABLED", True), \
+             patch.object(server_voice, "xfyun_asr", return_value=("十一", 1.0)), \
+             patch.object(server_voice, "sensevoice_asr", side_effect=recognize_audio):
+            result = server_voice.recognize(b"audio", "zh")
+        self.assertEqual(result, ("十一", "xfyun", 1.0))
 
     def test_multipart_language_reaches_recognizer(self):
         with patch.object(server_voice, "recognize", return_value=("a", "sensevoice-en", 1)) as recognize, \

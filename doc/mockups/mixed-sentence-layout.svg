@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">查字宝中英混合句结果页效果图</title>
+  <desc id="desc">只展示混合中英识别结果：原句、英文片段和中文意思收在同一块内容中，避免拼成两个结果页。</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#6D513B" flood-opacity=".12"/>
+    </filter>
+    <style>
+      .sans{font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;}
+      .ink{fill:#3A302A}.muted{fill:#927B6C}.orange{fill:#D96239}.teal{fill:#216C76}.green{fill:#3D8D69}
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#FFF9F1"/>
+  <rect width="280" height="900" fill="#FFF0D8"/>
+  <rect x="279" width="2" height="900" fill="#EADBC8"/>
+
+  <!-- persistent voice entry -->
+  <g class="sans">
+    <rect x="32" y="30" width="52" height="52" rx="15" fill="#EF8354"/>
+    <text x="58" y="66" text-anchor="middle" font-size="28" font-weight="800" fill="#fff">字</text>
+    <text x="101" y="65" font-size="25" font-weight="800" class="ink">查字宝</text>
+    <text x="140" y="119" text-anchor="middle" font-size="15" class="muted">说出来，就能查</text>
+    <circle cx="140" cy="408" r="106" fill="#fff"/>
+    <circle cx="140" cy="408" r="93" fill="#EF8354"/>
+    <rect x="124" y="357" width="32" height="81" rx="16" fill="#fff"/>
+    <path d="M112 408c0 30 12 47 28 47s28-17 28-47M140 455v26M118 481h44" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round"/>
+    <path d="M61 383c-9 16-9 35 0 50M219 383c9 16 9 35 0 50" fill="none" stroke="#EF8354" stroke-width="6" stroke-linecap="round"/>
+    <text x="140" y="544" text-anchor="middle" font-size="23" font-weight="800" class="ink">按住说话</text>
+    <text x="140" y="572" text-anchor="middle" font-size="14" class="muted">中文、English 都可以</text>
+    <rect x="32" y="794" width="216" height="58" rx="15" fill="#fff" stroke="#E8D4BE" stroke-width="2"/>
+    <text x="140" y="830" text-anchor="middle" font-size="18" font-weight="700" class="ink">📖 查过的内容</text>
+  </g>
+
+  <!-- one coherent mixed-language result -->
+  <g class="sans">
+    <rect x="316" y="28" width="74" height="50" rx="14" fill="#FFE6C9"/>
+    <text x="353" y="60" text-anchor="middle" font-size="19" font-weight="700" class="ink">← 返回</text>
+    <rect x="418" y="38" width="116" height="32" rx="16" fill="#E8F4ED"/>
+    <circle cx="438" cy="54" r="5" fill="#59AE76"/>
+    <text x="453" y="60" font-size="15" font-weight="700" class="green">识别完成</text>
+    <rect x="1335" y="28" width="218" height="50" rx="14" fill="#FFE6C9"/>
+    <text x="1444" y="60" text-anchor="middle" font-size="18" font-weight="700" class="ink">查过的内容</text>
+
+    <rect x="316" y="116" width="1237" height="598" rx="30" fill="#fff" filter="url(#shadow)"/>
+    <rect x="316" y="116" width="12" height="598" rx="6" fill="#EF8354"/>
+    <text x="370" y="174" font-size="23" font-weight="800" class="ink">你说的是</text>
+    <rect x="1306" y="142" width="196" height="52" rx="26" fill="#E9F5F4"/>
+    <text x="1404" y="175" text-anchor="middle" font-size="17" font-weight="700" class="teal">▶　重听整句</text>
+
+    <!-- source sentence: one line, one visual unit -->
+    <rect x="370" y="226" width="1126" height="178" rx="24" fill="#FFF8EC" stroke="#F2D6B4" stroke-width="2"/>
+    <text x="408" y="264" font-size="15" font-weight="700" class="muted">原句</text>
+    <text x="408" y="344" font-size="58" font-weight="700" class="ink">我　想　要</text>
+    <text x="735" y="344" font-size="57" font-weight="700" class="teal">a red apple</text>
+    <text x="408" y="380" font-size="16" class="muted">点中文字符查笔顺　·　点 English 听发音</text>
+
+    <line x1="370" y1="458" x2="1496" y2="458" stroke="#E6DCCF" stroke-width="2"/>
+    <text x="408" y="510" font-size="18" font-weight="800" class="green">这句话的意思</text>
+    <text x="408" y="578" font-size="42" font-weight="700" class="ink">一个红苹果</text>
+    <text x="408" y="626" font-size="20" class="muted">a red apple　→　一个红苹果</text>
+    <rect x="1260" y="536" width="190" height="58" rx="29" fill="#216C76"/>
+    <text x="1355" y="572" text-anchor="middle" font-size="18" font-weight="700" fill="#fff">▶　听英文</text>
+
+    <text x="370" y="790" font-size="18" font-weight="700" class="ink">中文和 English 在同一句里，意思跟在下面。</text>
+    <text x="1552" y="790" text-anchor="end" font-size="16" class="muted">想查别的？继续按住左边说话</text>
+  </g>
+</svg>

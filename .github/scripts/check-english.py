@@ -102,6 +102,19 @@ def test_numeric_asr_transcript_looks_up_english_number():
             assert body["meanings"][0]["translation"] == "eleven"
 
 
+def test_spaced_numeric_asr_transcript_is_translated_as_sentence():
+    with tempfile.TemporaryDirectory() as directory:
+        translator = TestTranslator("一，二，三，四，五。")
+        client = make_client(os.path.join(directory, "cache.sqlite3"), translator)
+        response = post(client, "1 2 3 4 5")
+        assert response.status_code == 200, (response.status_code, response.get_json())
+        body = response.get_json()
+        assert body["kind"] == "sentence"
+        assert body["query"] == "1 2 3 4 5"
+        assert body["translation"] == "一，二，三，四，五。"
+        assert translator.calls == 1
+
+
 def test_malformed_numeric_transcript_is_rejected():
     with tempfile.TemporaryDirectory() as directory:
         response = post(make_client(os.path.join(directory, "cache.sqlite3")), "11!!")
