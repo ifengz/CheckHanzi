@@ -24,7 +24,7 @@ assert.match(html, /id="combinedEnglishResult"/, 'combined results must reserve 
 assert.match(html, /function showCombinedSentenceMode\(/, 'mixed speech must render through the combined result mode');
 assert.match(html, /className\s*=\s*['"]mixed-char-button['"]/, 'Chinese characters in a mixed sentence must keep individual touch targets');
 assert.match(html, /hanzi\.length >= 2 \|\| \(hanzi\.length >= 1 && hasLatin\)/, 'mixed Chinese and Latin speech must use the sentence result view');
-assert.match(html, /function showSentenceMode\(text, fromHistory\)\{\s*if\(\/\[A-Za-z\]\/.test\(text\)\)/, 'sentence history must restore the same combined result view');
+assert.match(html, /function showSentenceMode\(text\)\{\s*if\(\/\[A-Za-z\]\/.test\(text\)\)/, 'sentence history must restore the same combined result view');
 
 const lookupCounterStart = html.indexOf('var lookupCount = 0;');
 const lookupCounterEnd = html.indexOf('function showWorkspace(', lookupCounterStart);
@@ -1177,7 +1177,6 @@ const historyStorage = new Map([
   ['chazi_history', JSON.stringify([{ c:'旧', t:1 }, { c:'字', t:2 }])],
   ['english_history', JSON.stringify([])],
 ]);
-let failHistoryKey = null;
 const historyElements = new Map();
 const historyElement = id => {
   if (!historyElements.has(id)) {
@@ -1189,30 +1188,17 @@ const historyElement = id => {
   return historyElements.get(id);
 };
 for (const id of ['history', 'detail', 'results', 'historyList', 'historyTitle', 'clearHistory', 'historyBtn', 'resHistBtn', 'detHistBtn', 'histCount', 'resHistCount', 'detHistCount', 'historyConfirm', 'historyConfirmText', 'historyCancel', 'historyConfirmOk', 'histBack']) historyElement(id);
-const historyFilterButtons = ['all', 'zh', 'en'].map(filter => {
-  const button = new TestNode('button');
-  button.setAttribute('data-history-filter', filter);
-  return button;
-});
 const historyContext = vm.createContext({
   Date,
   JSON,
   localStorage: {
     getItem: key => historyStorage.get(key) ?? null,
-    setItem: (key, value) => {
-      if (key === failHistoryKey) throw new Error('storage unavailable');
-      historyStorage.set(key, value);
-    },
+    setItem: (key, value) => { historyStorage.set(key, value); },
   },
   toast() {},
   cancelSpeech() {},
   requestAnimationFrame: callback => callback(),
-  document: {
-    addEventListener() {},
-    createElement: () => new TestNode(),
-    getElementById: historyElement,
-    querySelectorAll: selector => selector === '#historyFilter [data-history-filter]' ? historyFilterButtons : [],
-  },
+  document: { addEventListener() {}, createElement: () => new TestNode(), getElementById: historyElement },
   $: historyElement,
   DICT: {},
   esc: text => String(text),
@@ -1254,15 +1240,6 @@ historyContext.showWorkspace = page => {
   for (const name of ['history', 'detail', 'results']) historyElement(name).classList.toggle('show', page === name);
 };
 vm.runInContext(html.slice(historyUiStart, historyUiEnd), historyContext);
-historyContext.setHistoryFilter('all');
-assert.equal(historyContext.historyEntries().length, 100, 'all history must include Chinese and English records');
-assert.equal(historyFilterButtons.find(button => button.getAttribute('data-history-filter') === 'all').getAttribute('aria-pressed'), 'true', 'all history filter must be selected');
-historyContext.setHistoryFilter('en');
-assert.equal(historyContext.historyEntries().length, 50, 'English history filter must show only English records');
-assert.equal(historyFilterButtons.find(button => button.getAttribute('data-history-filter') === 'en').getAttribute('aria-pressed'), 'true', 'English history filter must be selected');
-historyContext.setHistoryFilter('zh');
-assert.equal(historyContext.historyEntries().length, 50, 'Chinese history filter must show only Chinese records');
-assert.equal(historyFilterButtons.find(button => button.getAttribute('data-history-filter') === 'zh').getAttribute('aria-pressed'), 'true', 'Chinese history filter must be selected');
 Object.assign(historyContext.DICT, { 春:{}, 夏:{}, 秋:{}, 冬:{} });
 let restoredWordChars = null;
 historyContext.showResultsPage = (chars, tone, fromHistory) => { restoredWordChars = { chars:[...chars], tone, fromHistory }; };
@@ -1276,12 +1253,6 @@ historyElement('histBack').click();
 assert.equal(historyContext.workspace, 'english', 'English history back must return to the English workspace');
 historyContext.openHistory();
 assert.equal(historyContext.workspace, 'history', 'history must reopen after returning to English');
-const combinedHistoryCalls = [];
-historyContext.showCombinedSentenceMode = (...args) => combinedHistoryCalls.push(args);
-historyContext.setHistoryFilter('en');
-historyContext.openEnglishHistory({ kind:'word', query:'older' });
-assert.deepEqual(combinedHistoryCalls, [['older', true]], 'opening an English record must use the combined result view and mark it as history-only');
-historyContext.setHistoryFilter('en');
 historyContext.requestClearHistory();
 historyContext.closeHistoryConfirm();
 assert.equal(historyContext.englishHistList.length, 50, 'canceling English clear must retain English history');
@@ -1292,29 +1263,10 @@ assert.equal(historyContext.englishHistList.length, 0, 'confirmed English clear 
 assert.equal(historyContext.histList.some(record => record.c === '旧'), true, 'confirmed English clear must not remove Chinese history');
 historyContext.englishHistList = [{ kind:'word', query:'apple', word:'apple', t:1 }];
 historyContext.lookupLanguage = 'zh';
-historyContext.setHistoryFilter('zh');
 historyContext.requestClearHistory();
 historyContext.confirmClearHistory();
 assert.equal(historyContext.histList.length, 0, 'confirmed Chinese clear must remove Chinese history');
 assert.equal(historyContext.englishHistList.length, 1, 'confirmed Chinese clear must not remove English history');
-historyContext.histList = [{ c:'最后', t:2 }];
-historyContext.setHistoryFilter('all');
-historyContext.requestClearHistory();
-historyContext.confirmClearHistory();
-assert.equal(historyContext.histList.length, 0, 'confirmed all clear must remove Chinese history');
-assert.equal(historyContext.englishHistList.length, 0, 'confirmed all clear must remove English history');
-historyContext.histList = [{ c:'留存', t:3 }];
-historyContext.englishHistList = [{ kind:'word', query:'keep', t:4 }];
-historyStorage.set('chazi_history', JSON.stringify(historyContext.histList));
-historyStorage.set('english_history', JSON.stringify(historyContext.englishHistList));
-failHistoryKey = 'english_history';
-historyContext.requestClearHistory();
-historyContext.confirmClearHistory();
-failHistoryKey = null;
-assert.deepEqual(historyContext.histList, [{ c:'留存', t:3 }], 'failed all clear must restore Chinese history in memory');
-assert.deepEqual(historyContext.englishHistList, [{ kind:'word', query:'keep', t:4 }], 'failed all clear must restore English history in memory');
-assert.deepEqual(JSON.parse(historyStorage.get('chazi_history')), [{ c:'留存', t:3 }], 'failed English clear write must roll back the already-cleared Chinese storage');
-assert.deepEqual(JSON.parse(historyStorage.get('english_history')), [{ kind:'word', query:'keep', t:4 }], 'failed English clear write must retain English storage');
 
 Object.assign(historyContext.DICT, { 甲:{}, 乙:{} });
 historyContext.histList = [{ c:'乙', t:1 }];
@@ -1325,7 +1277,6 @@ historyContext.renderDetail = () => {
   historyContext.showWorkspace('detail');
 };
 historyContext.lookupLanguage = 'zh';
-historyContext.setHistoryFilter('zh');
 historyContext.showWorkspace('detail');
 historyContext.openHistory();
 historyElement('historyList').children[0].click();
@@ -1364,32 +1315,9 @@ historyContext.englishLookupController = {
 historyContext.lookupLanguage = 'en';
 historyContext.showWorkspace('english');
 historyContext.openHistory();
-combinedHistoryCalls.length = 0;
 historyContext.openEnglishHistory({ kind:'word', query:'older' });
-assert.deepEqual(combinedHistoryCalls, [['older', true]], 'opening an older English record must use the combined view without rewriting history');
+assert.deepEqual(EnglishHistoryCalls, [['older', false, true, true]], 'opening an older English record must mark it as history-only');
 historyContext.returnFromEnglishHistory();
 historyElement('histBack').click();
 assert.deepEqual(restoredEnglishViews, [originalEnglishHistoryView], 'English history exit must restore the result that originally opened history');
-const restoredHistorySentences = [];
-historyContext.showSentenceMode = (text, fromHistory) => {
-  restoredHistorySentences.push([text, fromHistory]);
-  historyContext.resultsFromHistory = !!fromHistory;
-};
-historyContext.lookupLanguage = 'zh';
-historyContext.resultsView = { kind:'sentence', text:'one two', fromHistory:true };
-historyContext.resultsFromHistory = true;
-historyContext.showWorkspace('results');
-historyContext.openHistory();
-historyElement('histBack').click();
-assert.deepEqual(restoredHistorySentences, [['one two', true]], 'history return must preserve the original sentence origin');
-assert.equal(historyContext.resultsFromHistory, true, 'restored results must still return to history');
-const sentenceModeStart = html.indexOf('function showSentenceMode(text, fromHistory){');
-const sentenceModeEnd = html.indexOf('function showSelectMode(text){', sentenceModeStart);
-const restoredEnglishSentenceCalls = [];
-const sentenceModeContext = vm.createContext({
-  showCombinedSentenceMode: (...args) => restoredEnglishSentenceCalls.push(args),
-});
-vm.runInContext(html.slice(sentenceModeStart, sentenceModeEnd), sentenceModeContext);
-sentenceModeContext.showSentenceMode('one two', true);
-assert.deepEqual(restoredEnglishSentenceCalls, [['one two', true]], 'restoring an English sentence must suppress another English history write');
 console.log('Client syntax, audio resampling, and umlaut pinyin checks passed');
