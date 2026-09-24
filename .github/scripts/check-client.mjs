@@ -19,6 +19,12 @@ assert.doesNotMatch(englishScript, /config\.input|english-submit|searchInput/, '
 assert.match(html, /#recBtn\{[^}]*touch-action:none/, 'record button must reserve touch gestures for recording');
 assert.match(html, /id="lookupCounter"/, 'lookup results must expose the unobtrusive lookup counter');
 assert.match(html, /#lookupCounter\{[^}]*position:fixed[^}]*right:[^}]*bottom:/, 'lookup counter must stay in the lower-right corner');
+assert.match(html, /#languageMode\{[^}]*display:none/, 'combined lookup must remove the language switcher from the child-facing UI');
+assert.match(html, /id="combinedEnglishResult"/, 'combined results must reserve one inline English result area');
+assert.match(html, /function showCombinedSentenceMode\(/, 'mixed speech must render through the combined result mode');
+assert.match(html, /className\s*=\s*['"]mixed-char-button['"]/, 'Chinese characters in a mixed sentence must keep individual touch targets');
+assert.match(html, /hanzi\.length >= 2 \|\| \(hanzi\.length >= 1 && hasLatin\)/, 'mixed Chinese and Latin speech must use the sentence result view');
+assert.match(html, /function showSentenceMode\(text\)\{\s*if\(\/\[A-Za-z\]\/.test\(text\)\)/, 'sentence history must restore the same combined result view');
 
 const lookupCounterStart = html.indexOf('var lookupCount = 0;');
 const lookupCounterEnd = html.indexOf('function showWorkspace(', lookupCounterStart);
