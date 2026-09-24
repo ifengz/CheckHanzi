@@ -80,6 +80,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .combined-english-translation{font-size:clamp(24px,4vh,38px);line-height:1.35;font-weight:700;color:#2D2A26;overflow-wrap:anywhere;word-break:break-word;}
 .combined-english-hint{margin-top:clamp(6px,1vh,10px);font-size:clamp(13px,1.8vh,17px);color:#A28D74;}
 .combined-english-error{padding:12px 14px;border-radius:12px;background:#FFF0E6;border:2px solid #FFB66B;color:#8A4B00;font-size:clamp(15px,2vh,19px);}
+#combinedEnglishResult.mixed-inline-host{display:flex;flex:1;min-height:0;width:100%;max-width:1120px;}
+.mixed-inline-result{display:flex;flex:1;flex-direction:column;min-height:0;width:100%;padding:clamp(10px,1.5vh,18px) clamp(8px,1vw,16px) clamp(14px,2vh,24px);color:#2D2A26;}
+.mixed-token-row{display:flex;flex-shrink:0;align-items:center;justify-content:center;flex-wrap:wrap;gap:clamp(8px,.8vw,12px);padding:4px 0;}
+.mixed-token-row .mixed-inline-token{display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:56px;padding:6px 8px;border:0;border-bottom:2px solid #E6DCCF;border-radius:4px;background:transparent;color:#2D2A26;font:inherit;font-size:clamp(24px,3.5vh,44px);font-weight:800;line-height:1.1;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.mixed-token-row .mixed-inline-token:active,.mixed-token-row .mixed-inline-token.selected{border-bottom-color:#216C76;background:#E9F5F4;color:#216C76;}
+.mixed-token-row .mixed-inline-token:focus-visible{outline:2px solid #216C76;outline-offset:3px;}
+.mixed-translation{flex-shrink:0;min-height:clamp(24px,3vh,36px);padding:0 4px;text-align:center;color:#927B6C;font-size:clamp(14px,1.8vh,18px);line-height:1.45;}
+.mixed-translation.loading{color:#B8A080;}
+.mixed-detail-divider{flex-shrink:0;height:1px;margin:clamp(12px,2vh,22px) 0 0;background:#E6DCCF;}
+.mixed-detail-host{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:clamp(12px,1.8vh,20px) 0 0;}
+.mixed-detail-host.mixed-chinese-active:not([hidden]){display:flex;overflow:hidden;background:transparent;}
+#mixedDetailHost > #detailBody{background:transparent;padding:4px 6px 6px;gap:clamp(18px,2vw,30px);grid-template-columns:minmax(340px,40%) minmax(0,1fr);}
+#mixedDetailHost > #detailBody .char-hero{padding:16px 20px 16px 0;}
+#mixedDetailHost > #detailBody .detail-learning{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto minmax(148px,1fr) auto;gap:clamp(10px,1.5vh,18px) clamp(14px,1.8vw,24px);padding:0 2px 4px 0;overflow:auto;align-content:stretch;}
+#mixedDetailHost > #detailBody .detail-learning > .sec-label:first-child{grid-column:1 / -1;grid-row:1;}
+#mixedDetailHost > #detailBody .detail-learning > #strokes{grid-column:1 / -1;grid-row:2;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection{grid-column:1;grid-row:3 / span 2;min-width:0;display:flex;align-items:stretch;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-card{width:100%;min-height:148px;height:100%;padding:16px 18px;align-items:flex-start;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-badge{width:72px;height:72px;font-size:52px;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-title{font-size:clamp(20px,2.8vh,28px);line-height:1.3;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-detail{font-size:clamp(15px,2.1vh,20px);line-height:1.5;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-tip{font-size:clamp(13px,1.8vh,17px);line-height:1.45;padding:8px 12px;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label{grid-column:2;grid-row:3;align-self:end;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{grid-column:2;grid-row:4;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-self:stretch;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card{min-width:0;min-height:clamp(86px,11vh,132px);padding:14px 8px;justify-content:center;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card .w{font-size:clamp(26px,4vh,38px);line-height:1.25;letter-spacing:0;white-space:nowrap;}
+#mixedDetailHost > #detailBody #detailPinyin{font-size:clamp(58px,7vh,72px);}
+.mixed-detail-host[hidden]{display:none;}
+.mixed-detail{width:100%;}
+.mixed-detail-speak{min-width:clamp(72px,9vw,112px);min-height:clamp(44px,5.5vh,58px);padding:8px 12px;border:0;border-radius:14px;background:#216C76;color:#fff;font-size:clamp(14px,1.9vh,18px);font-weight:800;cursor:pointer;touch-action:manipulation;}
+.mixed-detail-label{margin-top:clamp(12px,1.6vh,18px);font-size:clamp(16px,2.2vh,22px);font-weight:700;color:#6C6259;}
+.mixed-detail-words{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.mixed-detail-word{min-height:56px;padding:8px 14px;border:0;border-bottom:2px solid #E6DCCF;border-radius:4px;background:transparent;color:#2D2A26;font-size:clamp(24px,3.4vh,30px);font-weight:700;cursor:pointer;touch-action:manipulation;}
+.mixed-detail-word.loading,.mixed-detail-speak.loading{outline:2px solid #528BBF;outline-offset:2px;}
+.mixed-detail-word.playing{background:#E9F5F4;border-bottom-color:#216C76;}
+.mixed-detail-loading,.mixed-detail-error{padding:10px 0;color:#927B6C;font-size:clamp(15px,2vh,19px);}
+.mixed-detail-en-word{font-size:clamp(34px,5vh,58px);font-weight:800;line-height:1.1;color:#216C76;overflow-wrap:anywhere;word-break:break-word;}
+.mixed-detail-en-head{display:flex;align-items:center;gap:12px;}
+.mixed-detail-en-head .mixed-detail-speak{margin-left:auto;}
+.mixed-detail-en-phonetic{margin-top:8px;font-size:clamp(28px,4vh,36px);line-height:1.25;color:#927B6C;overflow-wrap:anywhere;}
+.mixed-detail-en-meanings{display:flex;flex-wrap:wrap;gap:8px;margin-top:clamp(14px,2vh,22px);}
+.mixed-detail-en-meaning{color:#2D2A26;font-size:clamp(16px,2.2vh,22px);line-height:1.35;}
+.mixed-detail-en-forms{margin-top:clamp(14px,2vh,22px);font-size:clamp(15px,2vh,19px);line-height:1.5;color:#927B6C;}
 .char-card{min-width:clamp(120px,15vw,220px);flex:1;max-width:clamp(170px,27vw,280px);background:#fff;border:3px solid #FFE0B8;border-radius:clamp(14px,2vh,24px);padding:clamp(12px,2vh,24px) clamp(12px,1.8vw,18px) clamp(12px,2vh,22px);display:flex;flex-direction:column;align-items:center;box-shadow:0 6px 20px rgba(255,122,0,.12);transition:transform .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .char-card .zi{font-size:96px;line-height:1.5;flex-shrink:0;font-weight:400;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;}
 .char-card .py{font-size:28px;line-height:1.35;letter-spacing:0;color:#BB8C4F;font-weight:700;margin-top:clamp(3px,.5vh,8px);}
@@ -162,6 +205,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 }
 @media (max-width:899px), (orientation:portrait){
   .detail-learning{display:contents;}
+}
+@media (max-width:899px), (orientation:portrait){
+  #mixedDetailHost > #detailBody{display:flex;grid-template-columns:none;gap:10px;}
+  #mixedDetailHost > #detailBody .detail-learning{display:contents;overflow:visible;}
+  #mixedDetailHost > #detailBody .detail-learning > #radSection,
+  #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label,
+  #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{grid-column:auto;grid-row:auto;}
+  #mixedDetailHost > #detailBody .detail-learning > #radSection{display:block;}
+  #mixedDetailHost > #detailBody .detail-learning > #radSection .rad-card{height:auto;min-height:0;}
+  #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{display:flex;}
 }
 @media (max-width:600px){
   #detailPinyin{font-size:40px;}
@@ -1024,13 +1077,21 @@ function fitResultCards(){
   });
 }
 window.addEventListener("resize", function(){
-  if($("results").classList.contains("show")) requestAnimationFrame(fitResultCards);
+  if($("results").classList.contains("show")) requestAnimationFrame(function(){
+    fitResultCards();
+    var host = mixedDetailHost();
+    if(host && $("detailBody").parentNode === host){
+      fitDetailChar();
+      var mixedStrokes = $("strokes"); fitStrokeCells(mixedStrokes, mixedStrokes.querySelectorAll(".stroke-cell").length);
+    }
+  });
   if($("detail").classList.contains("show")) requestAnimationFrame(function(){
     fitDetailChar();
     var box = $("strokes"); fitStrokeCells(box, box.querySelectorAll(".stroke-cell").length);
   });
 });
 function renderDetail(toneNum){
+  restoreMixedChineseDetail();
   cancelSpeech();
   var data = DICT[current]; if(!data) return;
   prefetchTTS(current).catch(function(){});
@@ -1052,9 +1113,10 @@ function renderDetail(toneNum){
 function fitDetailChar(){
   var hero = document.querySelector(".char-hero"); var char = $("detailChar");
   if(!hero || !char || !hero.clientWidth) return;
-  var size = Math.min(280, Math.floor((hero.clientWidth - 28) * 0.88));
   var body = $("detailBody");
+  var mixedActive = body && body.parentNode && body.parentNode.id === "mixedDetailHost";
   var landscapeGrid = getComputedStyle(body).display === "grid";
+  var size = Math.min(mixedActive && landscapeGrid ? 360 : 280, Math.floor((hero.clientWidth - 28) * 0.88));
   if(landscapeGrid){
     var heroStyle = getComputedStyle(hero);
     var fixedHeight = $("detailPinyin").getBoundingClientRect().height + $("detailMeta").getBoundingClientRect().height
@@ -1652,7 +1714,10 @@ function startWave(){
 function stopWave(){ clearInterval(rec.animTimer); }
 var combinedEnglishSeq = 0;
 var combinedEnglishController = null;
+var mixedDetailSeq = 0;
+var mixedEnglishDetailController = null;
 function clearCombinedEnglishResult(){
+  restoreMixedChineseDetail();
   combinedEnglishSeq++;
   if(combinedEnglishController) combinedEnglishController.abort();
   combinedEnglishController = null;
@@ -1660,23 +1725,30 @@ function clearCombinedEnglishResult(){
   if(!box) return;
   box.hidden = true;
   box.classList.remove("show");
+  box.classList.remove("mixed-inline-host");
   box.textContent = "";
 }
 function resetMixedSentenceUI(){
   clearCombinedEnglishResult();
+  mixedDetailSeq++;
+  if(mixedEnglishDetailController) mixedEnglishDetailController.abort();
+  mixedEnglishDetailController = null;
   var echo = $("voiceEcho");
   if(!echo) return;
   echo.classList.remove("mixed-echo");
   echo.innerHTML = '<b style="color:#FF7A00;">🗣</b> <span id="voiceEchoTxt"></span>';
   echo.style.display = "none";
+  var title = $("rTitle"); if(title) title.style.display = "";
+  var sub = $("rSub"); if(sub) sub.style.display = "";
 }
 function mixedEnglishPhrase(text){
   var words = String(text || "").match(/[A-Za-z]+(?:['’-][A-Za-z]+)*|[0-9]+/g) || [];
   return words.join(" ");
 }
-function renderMixedSentenceTokens(text){
-  var echo = $("voiceEcho"); var target = $("voiceEchoTxt");
+function renderMixedSentenceTokens(text, tokenTarget){
+  var echo = $("voiceEcho"); var target = tokenTarget || $("voiceEchoTxt");
   if(!echo || !target) return;
+  var inline = !!tokenTarget && tokenTarget.id === "mixedTokenRow";
   target.textContent = "";
   var value = String(text || "");
   var i = 0;
@@ -1684,11 +1756,11 @@ function renderMixedSentenceTokens(text){
     var ch = value[i];
     if(/[\u4e00-\u9fff]/.test(ch)){
       var button = document.createElement("button");
-      button.type = "button"; button.className = "mixed-char-button"; button.textContent = ch;
+      button.type = "button"; button.className = "mixed-char-button" + (inline ? " mixed-inline-token" : ""); button.textContent = ch;
       button.setAttribute("aria-label", "查询 " + ch);
       if(DICT[ch]){
         (function(z){
-          button.addEventListener("click", function(){ current = z; detailFrom = "results"; addHistory(z); renderDetail(0); });
+          button.addEventListener("click", function(){ if(inline) renderMixedChineseDetail(z, this); else { current = z; detailFrom = "results"; addHistory(z); renderDetail(0); } });
         })(ch);
       }else{
         button.classList.add("missing");
@@ -1698,14 +1770,104 @@ function renderMixedSentenceTokens(text){
     }
     var latin = value.slice(i).match(/^(?:[A-Za-z]+(?:['’-][A-Za-z]+)*|[0-9]+)/);
     if(latin){
-      var word = document.createElement("span"); word.className = "mixed-latin"; word.textContent = latin[0];
+      var word;
+      if(inline){
+        word = document.createElement("button"); word.type = "button"; word.className = "mixed-latin-button mixed-inline-token"; word.textContent = latin[0];
+        word.setAttribute("aria-label", "查询英文 " + latin[0]);
+        (function(englishWord, trigger){
+          trigger.addEventListener("click", function(){ renderMixedEnglishDetailForWord(englishWord, trigger); });
+        })(latin[0], word);
+      }else{
+        word = document.createElement("span"); word.className = "mixed-latin"; word.textContent = latin[0];
+      }
       target.appendChild(word); i += latin[0].length; continue;
     }
-    var punctuation = document.createElement("span");
-    punctuation.textContent = ch === " " ? " " : ch;
-    if(ch === " ") punctuation.className = "mixed-space";
-    target.appendChild(punctuation); i++;
+    if(!inline || ch !== " "){
+      var punctuation = document.createElement("span");
+      punctuation.textContent = ch;
+      if(ch === " ") punctuation.className = "mixed-space";
+      target.appendChild(punctuation);
+    }
+    i++;
   }
+}
+function clearMixedTokenSelection(){
+  document.querySelectorAll("#mixedTokenRow .mixed-inline-token.selected").forEach(function(node){ node.classList.remove("selected"); });
+}
+function mixedDetailHost(){ return $("mixedDetailHost"); }
+function restoreMixedChineseDetail(){
+  var body = $("detailBody"), detail = $("detail");
+  if(!body || !detail || body.parentNode === detail) return;
+  body.parentNode.classList.remove("mixed-chinese-active");
+  detail.appendChild(body);
+}
+function renderMixedChineseDetail(ch, trigger){
+  var host = mixedDetailHost(); var data = DICT[ch];
+  if(!host || !data) return;
+  cancelSpeech();
+  clearMixedTokenSelection();
+  if(trigger) trigger.classList.add("selected");
+  current = ch; detailFrom = "results"; addHistory(ch);
+  mixedDetailSeq++;
+  if(mixedEnglishDetailController) mixedEnglishDetailController.abort();
+  mixedEnglishDetailController = null;
+  // 在分隔线下复用原有详情区，保留大字、拼音、笔顺、部首与组词的样式和交互。
+  renderDetail(0);
+  host.hidden = false;
+  host.textContent = "";
+  host.classList.add("mixed-chinese-active");
+  host.appendChild($("detailBody"));
+  showWorkspace("results");
+  fitDetailChar();
+  var strokes = $("strokes"); fitStrokeCells(strokes, strokes.querySelectorAll(".stroke-cell").length);
+}
+function renderMixedEnglishDetailForWord(word, trigger){
+  var host = mixedDetailHost(); if(!host || !word) return;
+  restoreMixedChineseDetail();
+  cancelSpeech();
+  var phraseWords = [word];
+  var neighbor = trigger && trigger.previousElementSibling;
+  while(neighbor && neighbor.classList.contains("mixed-latin-button")){ phraseWords.unshift(neighbor.textContent); neighbor = neighbor.previousElementSibling; }
+  neighbor = trigger && trigger.nextElementSibling;
+  while(neighbor && neighbor.classList.contains("mixed-latin-button")){ phraseWords.push(neighbor.textContent); neighbor = neighbor.nextElementSibling; }
+  var contextPhrase = phraseWords.length > 1 ? phraseWords.join(" ") : "";
+  clearMixedTokenSelection();
+  if(trigger) trigger.classList.add("selected");
+  mixedDetailSeq++;
+  if(mixedEnglishDetailController) mixedEnglishDetailController.abort();
+  var seq = mixedDetailSeq;
+  var controller = new AbortController(); mixedEnglishDetailController = controller;
+  host.hidden = false;
+  host.innerHTML = '<div class="mixed-detail-loading">正在查 '+esc(word)+' 的读音…</div>';
+  fetch("/api/english", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text:word}), signal:controller.signal})
+    .then(function(response){ return response.json().catch(function(){ return null; }).then(function(body){ if(!response.ok) throw new Error(body && body.error && body.error.message ? body.error.message : "英文查询失败"); return body; }); })
+    .then(function(result){
+      if(seq !== mixedDetailSeq || controller.signal.aborted) return;
+      mixedEnglishDetailController = null;
+      if(!result || (result.kind !== "word" && result.kind !== "sentence")) throw new Error("英文结果格式不正确");
+      renderMixedEnglishDetail(result, word, contextPhrase);
+    })
+    .catch(function(error){
+      if(seq !== mixedDetailSeq || error.name === "AbortError") return;
+      mixedEnglishDetailController = null;
+      host.innerHTML = '<div class="mixed-detail-error">这个英文词的读音暂时没查到</div>';
+    });
+}
+function renderMixedEnglishDetail(result, query, contextPhrase){
+  var host = mixedDetailHost(); if(!host) return;
+  var spoken = result && result.kind === "word" && result.word ? result.word : query;
+  var phonetic = result && typeof result.phonetic === "string" ? result.phonetic : "";
+  var meanings = result && Array.isArray(result.meanings) ? result.meanings.filter(function(item){ return item && typeof item.translation === "string" && item.translation; }) : [];
+  var forms = result && Array.isArray(result.forms) ? result.forms.filter(function(item){ return typeof item === "string" && item; }) : [];
+  var meaningsHtml = meanings.length ? meanings.slice(0, 3).map(function(item){ return '<span class="mixed-detail-en-meaning">'+esc(item.translation)+'</span>'; }).join("") : '<span class="mixed-detail-loading">暂无中文释义</span>';
+  var formsHtml = forms.length ? '<div class="mixed-detail-en-forms">相关词形：'+forms.slice(0, 5).map(esc).join("、")+'</div>' : "";
+  var phraseHtml = contextPhrase ? '<div class="mixed-detail-label">句中词组</div><div class="mixed-detail-words"><button type="button" class="mixed-detail-word">'+esc(contextPhrase)+'</button></div>' : "";
+  host.hidden = false;
+  host.innerHTML = '<div class="mixed-detail mixed-detail-en"><div class="mixed-detail-en-head"><div class="mixed-detail-en-word">'+esc(spoken)+'</div><button type="button" class="mixed-detail-speak" aria-label="朗读 '+esc(spoken)+'">🔊 朗读</button></div>'
+    + '<div class="mixed-detail-en-phonetic">'+esc(phonetic || "暂无音标")+'</div><div class="mixed-detail-en-meanings">'+meaningsHtml+'</div>'+phraseHtml+formsHtml+'</div>';
+  host.querySelector(".mixed-detail-speak").addEventListener("click", function(){ speak(spoken, this, "en"); });
+  var phraseButton = host.querySelector(".mixed-detail-word");
+  if(phraseButton) phraseButton.addEventListener("click", function(){ speak(contextPhrase, this, "en"); });
 }
 function saveCombinedEnglishRecord(result, query){
   if(!result || (result.kind !== "word" && result.kind !== "sentence") || typeof query !== "string" || !query.trim()) return;
@@ -1722,6 +1884,17 @@ function saveCombinedEnglishRecord(result, query){
 }
 function renderCombinedEnglishResult(result, query){
   var box = $("combinedEnglishResult"); if(!box) return;
+  if(box.classList.contains("mixed-inline-host")){
+    var translation = result && result.kind === "word" && Array.isArray(result.meanings) && result.meanings[0]
+      ? result.meanings[0].translation
+      : (result && typeof result.translation === "string" ? result.translation : "");
+    var translationNode = $("mixedTranslation");
+    if(translationNode){
+      translationNode.classList.remove("loading");
+      translationNode.textContent = translation || "暂时没有中文翻译";
+    }
+    return;
+  }
   box.textContent = "";
   var card = document.createElement("div"); card.className = "combined-english-card";
   var head = document.createElement("div"); head.className = "combined-english-head";
@@ -1745,10 +1918,19 @@ function renderCombinedEnglishResult(result, query){
 }
 function loadCombinedEnglishResult(query, fromHistory){
   if(!query) return;
-  clearCombinedEnglishResult();
   var box = $("combinedEnglishResult"); if(!box) return;
-  box.hidden = false; box.classList.add("show");
-  var loading = document.createElement("div"); loading.className = "combined-english-card"; loading.textContent = "正在查 English…"; box.appendChild(loading);
+  var mixedInline = box.classList.contains("mixed-inline-host");
+  if(mixedInline){
+    combinedEnglishSeq++;
+    if(combinedEnglishController) combinedEnglishController.abort();
+    combinedEnglishController = null;
+    var mixedTranslation = $("mixedTranslation");
+    if(mixedTranslation){ mixedTranslation.classList.add("loading"); mixedTranslation.textContent = "正在查中文意思…"; }
+  }else{
+    clearCombinedEnglishResult();
+    box.hidden = false; box.classList.add("show");
+    var loading = document.createElement("div"); loading.className = "combined-english-card"; loading.textContent = "正在查 English…"; box.appendChild(loading);
+  }
   var seq = combinedEnglishSeq; var controller = new AbortController(); combinedEnglishController = controller;
   fetch("/api/english", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text:query}), signal:controller.signal})
     .then(function(response){ return response.json().catch(function(){ return null; }).then(function(body){ if(!response.ok) throw new Error(body && body.error && body.error.message ? body.error.message : "英文查询失败"); return body; }); })
@@ -1761,8 +1943,14 @@ function loadCombinedEnglishResult(query, fromHistory){
     })
     .catch(function(error){
       if(seq !== combinedEnglishSeq || error.name === "AbortError") return;
-      combinedEnglishController = null; box.textContent = "";
-      var errorNode = document.createElement("div"); errorNode.className = "combined-english-error"; errorNode.textContent = "英文解释暂时没出来，原句仍然保留。"; box.appendChild(errorNode);
+      combinedEnglishController = null;
+      if(mixedInline){
+        var failedTranslation = $("mixedTranslation");
+        if(failedTranslation){ failedTranslation.classList.remove("loading"); failedTranslation.textContent = "中文意思暂时没查到"; }
+      }else{
+        box.textContent = "";
+        var errorNode = document.createElement("div"); errorNode.className = "combined-english-error"; errorNode.textContent = "英文解释暂时没出来，原句仍然保留。"; box.appendChild(errorNode);
+      }
     });
 }
 function showCombinedSentenceMode(text, fromHistory){
@@ -1770,14 +1958,31 @@ function showCombinedSentenceMode(text, fromHistory){
   resetMixedSentenceUI();
   resultsFromHistory = !!fromHistory;
   resultsView = {kind:"sentence", text:text, fromHistory:!!fromHistory};
+  var isMixedSentence = /[\u4e00-\u9fff]/.test(text) && /[A-Za-z]/.test(text);
+  if(!isMixedSentence){
+    $("rTitle").textContent = "📖 你说的是：";
+    $("rSub").textContent = "点中文字看笔顺，下面查看 English 的意思";
+    var oldEcho = $("voiceEcho");
+    oldEcho.classList.add("mixed-echo");
+    oldEcho.innerHTML = '<span class="mixed-echo-label">🗣 你说的是</span><span id="voiceEchoTxt"></span>';
+    oldEcho.style.display = "block";
+    renderMixedSentenceTokens(text);
+    var oldChars = $("resultChars"); oldChars.innerHTML = ""; oldChars.style.display = "none";
+    var oldPhrase = mixedEnglishPhrase(text);
+    if(oldPhrase) loadCombinedEnglishResult(oldPhrase, !!fromHistory);
+    showWorkspace("results");
+    return;
+  }
   $("rTitle").textContent = "📖 你说的是：";
-  $("rSub").textContent = "点中文字看笔顺，下面查看 English 的意思";
-  var echo = $("voiceEcho");
-  echo.classList.add("mixed-echo");
-  echo.innerHTML = '<span class="mixed-echo-label">🗣 你说的是</span><span id="voiceEchoTxt"></span>';
-  echo.style.display = "block";
-  renderMixedSentenceTokens(text);
+  $("rSub").textContent = "";
+  $("rTitle").style.display = "none";
+  $("rSub").style.display = "none";
+  var echo = $("voiceEcho"); echo.style.display = "none";
   var chars = $("resultChars"); chars.innerHTML = ""; chars.style.display = "none";
+  var box = $("combinedEnglishResult");
+  box.hidden = false; box.classList.add("show", "mixed-inline-host");
+  box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-token-row" id="mixedTokenRow"></div><div class="mixed-translation loading" id="mixedTranslation" aria-live="polite">正在查中文意思…</div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
+  renderMixedSentenceTokens(text, $("mixedTokenRow"));
   var phrase = mixedEnglishPhrase(text);
   if(phrase) loadCombinedEnglishResult(phrase, !!fromHistory);
   showWorkspace("results");
