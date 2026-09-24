@@ -224,6 +224,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #lookupWorkspace .page-head button{min-width:56px;min-height:56px;border-radius:8px;padding:8px 12px;}
 #lookupWorkspace .page-head .brand{font-size:20px;letter-spacing:0;}
 #lookupWorkspace #historyList{padding:0 12px 16px;overflow-y:auto;}
+#historyFilter{display:flex;gap:8px;padding:0 12px 8px;flex-shrink:0;}
+#historyFilter button{flex:1;min-height:44px;padding:8px 12px;border:2px solid #F0E0C8;border-radius:8px;background:#fff;color:#5A5048;font-size:16px;font-weight:700;cursor:pointer;}
+#historyFilter button[aria-pressed="true"]{background:#176476;border-color:#176476;color:#fff;}
 @media (min-width:900px) and (orientation:landscape){
   #home{flex-basis:250px;}
   #home .home-brand{margin-top:4px;}
@@ -306,6 +309,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 
   <div id="history">
     <div class="page-head"><button id="histBack">‹ 返回</button><span class="brand" id="historyTitle">汉字记录</span><button id="clearHistory">清空汉字记录</button></div>
+    <div id="historyFilter" role="group" aria-label="记录类型">
+      <button type="button" data-history-filter="all" aria-pressed="true">全部</button>
+      <button type="button" data-history-filter="zh" aria-pressed="false">汉字</button>
+      <button type="button" data-history-filter="en" aria-pressed="false">English</button>
+    </div>
     <div id="historyList"></div>
   </div>
 
@@ -352,7 +360,7 @@ var characterStrokeChars = "";
   characterStrokeChars = typeof ext.strokeChars === "string" ? ext.strokeChars : "";
 })(typeof CHARACTER_DATA === "object" ? CHARACTER_DATA : null);
 
-var mode = "cn"; var current = null; var currentHomophones = []; var histList = []; var englishHistList = []; var resultsFromHistory = false; var resultsView = null;
+var mode = "cn"; var current = null; var currentHomophones = []; var histList = []; var englishHistList = []; var historyFilter = "all"; var resultsFromHistory = false; var resultsView = null;
 var lookupLanguage = "zh"; var englishLookupController = null;
 function loadHistory(key){ try{ var value = JSON.parse(localStorage.getItem(key)||"[]"); return Array.isArray(value) ? value : []; }catch(e){ return []; } }
 histList = loadHistory("chazi_history");
@@ -563,9 +571,11 @@ var micWarm = null;            // {stream, src, proc, mute} 常驻
 var preroll = null;            // {buf, w, filled} buf 长度按实际采样率 1 秒，创建时定
 var PREROLL_MS = 350;          // 实际拼接的前置时长
 var MIC_START_TIMEOUT_MS = 5000;
+var MIC_PERMISSION_TIMEOUT_MS = 30000;
 var micGeneration = 0;
 var micPrewarmToken = 0;
 var micNeedsGesture = false;
+var micActivationPending = false;
 var cancelMicStartup = function(){};
 function setMicActivationRequired(required){
   micNeedsGesture = required;
@@ -614,10 +624,11 @@ var ensureMicStream = (function(){
     pending = null;
     pendingOwner = "";
   };
-  function waitFor(promise, message, code){
+  function waitFor(promise, message, code, timeoutMs){
+    timeoutMs = typeof timeoutMs === "number" ? timeoutMs : MIC_START_TIMEOUT_MS;
     var timer = 0;
     var timeout = new Promise(function(_, reject){
-      timer = setTimeout(function(){ var error = new Error(message); error.code = code || "startup_timeout"; reject(error); }, MIC_START_TIMEOUT_MS);
+      timer = setTimeout(function(){ var error = new Error(message); error.code = code || "startup_timeout"; reject(error); }, timeoutMs);
     });
     return Promise.race([promise, timeout]).finally(function(){ clearTimeout(timer); });
   }
@@ -653,7 +664,7 @@ var ensureMicStream = (function(){
     var timedOut = false;
     var stream;
     try{
-      stream = await waitFor(request, "麦克风权限启动超时，请检查浏览器权限后再试", "mic_request_timeout");
+      stream = await waitFor(request, "麦克风权限启动超时，请检查浏览器权限后再试", "mic_request_timeout", MIC_PERMISSION_TIMEOUT_MS);
     }catch(error){
       timedOut = error && error.code === "mic_request_timeout";
       if(timedOut) request.then(function(lateStream){
@@ -706,7 +717,9 @@ var ensureMicStream = (function(){
   };
 })();
 async function prewarmMicrophone(fromGesture){
+  if(fromGesture && micActivationPending) return;
   var token = ++micPrewarmToken;
+  if(fromGesture) micActivationPending = true;
   setMicStatus("starting", "麦克风启动中…");
   if(fromGesture) ensureAudio();
   try{
@@ -750,7 +763,12 @@ async function prewarmMicrophone(fromGesture){
   }catch(error){
     if(token !== micPrewarmToken || (!fromGesture && document.hidden)) return;
     if(!rec.active && !rec.releasePending && !rec.recorderObj) resetCaptureAudio();
-    setMicStatus("gesture", "轻点启用麦克风");
+    if(error && error.name === "NotAllowedError") setMicStatus("gesture", "请在浏览器提示中允许麦克风");
+    else if(error && error.name === "NotFoundError") setMicStatus("gesture", "没有找到麦克风，请检查设备");
+    else if(error && error.code === "mic_request_timeout") setMicStatus("gesture", "麦克风权限等待超时，请在浏览器提示中允许麦克风后再试");
+    else setMicStatus("gesture", "轻点启用麦克风");
+  }finally{
+    if(fromGesture && token === micPrewarmToken) micActivationPending = false;
   }
 }
 function takePrerollBefore(startW){
@@ -953,14 +971,12 @@ function showWorkspace(page){
   if(english) english.hidden = page !== "english";
   renderLookupCounter(page === "results" || page === "detail" || page === "english");
 }
-function showResultsPage(chars, toneNum, fromHistory, preserveAll){
+function showResultsPage(chars, toneNum, fromHistory, preserveAll, prepare){
   cancelSpeech();
   resetMixedSentenceUI();
   resultsFromHistory = !!fromHistory;
   resultsView = {kind:"candidates", chars:Array.from(chars), toneNum:toneNum || 0, fromHistory:!!fromHistory, preserveAll:!!preserveAll};
-  showWorkspace("results");
   var _rc = $("resultChars"); if(_rc) _rc.style.display = "";
-  prefetchTTSList(chars, 4);
   var box = $("resultChars"); box.innerHTML = "";
   chars.forEach(function(ch){
     var data = DICT[ch];
@@ -989,7 +1005,11 @@ function showResultsPage(chars, toneNum, fromHistory, preserveAll){
     card.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(ch, this); };
     box.appendChild(card);
   });
-  requestAnimationFrame(function(){ requestAnimationFrame(fitResultCards); });
+  if(typeof prepare === "function") prepare();
+  showWorkspace("results");
+  fitResultCards();
+  requestAnimationFrame(fitResultCards);
+  prefetchTTSList(chars, 4);
 }
 $("resBack").addEventListener("click", function(){ cancelSpeech(); resetMixedSentenceUI(); if(resultsFromHistory){ resultsFromHistory = false; showWorkspace("history"); restoreHistoryScroll(); }else showWorkspace(null); });
 // Size each glyph to its actual card; additional candidates remain scrollable.
@@ -1176,10 +1196,34 @@ function saveEnglishRecord(record){
   if(!saveEnglishHistory()) englishHistList = previous;
   renderHistCount();
 }
-function currentHistoryList(){ return lookupLanguage === "en" ? englishHistList : histList; }
+function historyEntries(){
+  var entries = [];
+  if(historyFilter !== "en") histList.forEach(function(item){ entries.push({language:"zh", item:item}); });
+  if(historyFilter !== "zh") englishHistList.filter(englishHistoryRecord).forEach(function(item){ entries.push({language:"en", item:item}); });
+  entries.sort(function(a,b){ return (Number(b.item && b.item.t) || 0) - (Number(a.item && a.item.t) || 0); });
+  return entries;
+}
+function currentHistoryList(){
+  if(historyFilter === "en") return englishHistList;
+  if(historyFilter === "zh") return histList;
+  return histList.concat(englishHistList).sort(function(a,b){ return (Number(b && b.t) || 0) - (Number(a && a.t) || 0); });
+}
+function activeHistoryFilter(){
+  return historyFilter;
+}
+function historyFilterLabel(filter){ return filter === "en" ? "英语记录" : filter === "zh" ? "汉字记录" : "全部记录"; }
+function setHistoryFilter(filter){
+  historyFilter = filter === "en" || filter === "zh" ? filter : "all";
+  document.querySelectorAll("#historyFilter [data-history-filter]").forEach(function(button){
+    var selected = button.getAttribute("data-history-filter") === historyFilter;
+    button.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+  updateHistoryUI();
+  if($('history').classList.contains('show')) renderHistory();
+}
 function updateHistoryUI(){
-  var isEnglish = lookupLanguage === "en";
-  var label = isEnglish ? "英语记录" : "汉字记录";
+  var filter = activeHistoryFilter();
+  var label = historyFilterLabel(filter);
   var title = $("historyTitle"); if(title) title.textContent = label;
   var clear = $("clearHistory"); if(clear){ clear.textContent = "清空" + label; clear.setAttribute("aria-label", "清空" + label); }
   ["historyBtn","resHistBtn","detHistBtn"].forEach(function(id){
@@ -1190,7 +1234,7 @@ function updateHistoryUI(){
   renderHistCount();
 }
 function renderHistCount(){
-  var count = currentHistoryList().filter(function(item){ return lookupLanguage !== "en" || englishHistoryRecord(item); }).length;
+  var count = historyEntries().length;
   ["histCount","resHistCount","detHistCount"].forEach(function(id){ var node = $(id); if(node) node.textContent = count ? "（"+count+"）" : ""; });
 }
 function formatHistoryDate(value){
@@ -1213,11 +1257,12 @@ function decorateHistorySpeaker(button){
 }
 function renderHistory(){
   var box = $("historyList"); box.innerHTML = "";
-  var records = currentHistoryList().filter(function(item){ return lookupLanguage !== "en" || englishHistoryRecord(item); });
+  var records = historyEntries();
   if(!records.length){ box.innerHTML = '<div class="h-empty">还没有查过的内容</div>'; return; }
-  records.forEach(function(item){
+  records.forEach(function(entry){
+    var item = entry.item;
     var row = document.createElement("div"); row.className = "h-item";
-    if(lookupLanguage === "en"){
+    if(entry.language === "en"){
       var speech = item.kind === "word" && typeof item.word === "string" && item.word ? item.word : item.query;
       var phonetic = item.kind === "word" && typeof item.phonetic === "string" ? item.phonetic : "";
       var summary = item.kind === "word" && Array.isArray(item.meanings) && item.meanings[0] && typeof item.meanings[0].translation === "string" ? item.meanings[0].translation : (item.translation || "");
@@ -1250,10 +1295,9 @@ function openChineseWordHistory(item){
   showResultsPage(Array.from(item.w), 0, true, true);
 }
 function openEnglishHistory(item){
-  if(!englishLookupController || !englishHistoryRecord(item)) return;
+  if(!englishHistoryRecord(item)) return;
   historyScrollTop = $("historyList").scrollTop;
-  showWorkspace("english");
-  englishLookupController.lookup(item.query, false, true, true);
+  showCombinedSentenceMode(item.query, true);
 }
 function returnFromEnglishHistory(){
   cancelSpeech();
@@ -1264,6 +1308,7 @@ function returnFromEnglishHistory(){
 function openHistory(){
   cancelSpeech();
   if($("history").classList.contains("show")) return;
+  updateHistoryUI();
   histFrom = $("detail").classList.contains("show") ? "detail" : ($("results").classList.contains("show") ? "results" : (lookupLanguage === "en" ? "english" : "home"));
   var englishVisible = !!$("englishLookupRoot") && !$("englishLookupRoot").hidden;
   historyReturn = {
@@ -1286,6 +1331,11 @@ function openHistory(){
 }
 $("historyBtn").addEventListener("click", openHistory);
 $("resHistBtn").addEventListener("click", openHistory);
+if(document.querySelectorAll){
+  document.querySelectorAll("#historyFilter [data-history-filter]").forEach(function(button){
+    button.addEventListener("click", function(){ setHistoryFilter(button.getAttribute("data-history-filter")); });
+  });
+}
 $("histBack").addEventListener("click", function(){
   cancelSpeech();
   $("history").classList.remove("show");
@@ -1303,7 +1353,7 @@ $("histBack").addEventListener("click", function(){
     if(historyReturn && historyReturn.resultsView && historyReturn.resultsView.kind === "candidates" && historyReturn.resultsView.chars){
       showResultsPage(historyReturn.resultsView.chars, historyReturn.resultsView.toneNum, historyReturn.resultsView.fromHistory, historyReturn.resultsView.preserveAll);
     }else if(historyReturn && historyReturn.resultsView && historyReturn.resultsView.kind === "sentence"){
-      showSentenceMode(historyReturn.resultsView.text);
+      showSentenceMode(historyReturn.resultsView.text, historyReturn.resultsView.fromHistory);
     }else{
       $("results").classList.add("show");
       requestAnimationFrame(fitResultCards);
@@ -1322,9 +1372,9 @@ function closeHistoryConfirm(){
   if(trigger && typeof trigger.focus === "function") trigger.focus();
 }
 function requestClearHistory(){
-  historyClearLanguage = lookupLanguage;
+  historyClearLanguage = activeHistoryFilter();
   historyConfirmReturn = $("clearHistory");
-  $("historyConfirmText").textContent = "清空" + (lookupLanguage === "en" ? "英语记录" : "汉字记录") + "？";
+  $("historyConfirmText").textContent = "清空" + historyFilterLabel(historyClearLanguage) + "？";
   $("historyConfirm").hidden = false;
   $("historyCancel").focus();
 }
@@ -1334,9 +1384,18 @@ function confirmClearHistory(){
   if(language === "en"){
     var oldEnglish = englishHistList; englishHistList = [];
     if(!saveEnglishHistory()) englishHistList = oldEnglish;
-  }else{
+  }else if(language === "zh"){
     var oldChinese = histList; histList = [];
     if(!saveHistory()) histList = oldChinese;
+  }else{
+    var oldAllChinese = histList; var oldAllEnglish = englishHistList;
+    histList = []; englishHistList = [];
+    var savedChinese = saveHistory();
+    var savedEnglish = savedChinese && saveEnglishHistory();
+    if(!savedChinese || !savedEnglish){
+      histList = oldAllChinese; englishHistList = oldAllEnglish;
+      if(savedChinese) saveHistory();
+    }
   }
   renderHistCount(); renderHistory();
 }
@@ -1407,7 +1466,7 @@ function bindRecButton(btn){
     if(micNeedsGesture){
       rec.btn = btn;
       rec.startY = e.clientY;
-      prewarmMicrophone(true);
+      if(!micActivationPending) prewarmMicrophone(true);
       return;
     }
     micPrewarmToken++;
@@ -1612,7 +1671,7 @@ function resetMixedSentenceUI(){
   echo.style.display = "none";
 }
 function mixedEnglishPhrase(text){
-  var words = String(text || "").match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || [];
+  var words = String(text || "").match(/[A-Za-z]+(?:['’-][A-Za-z]+)*|[0-9]+/g) || [];
   return words.join(" ");
 }
 function renderMixedSentenceTokens(text){
@@ -1637,7 +1696,7 @@ function renderMixedSentenceTokens(text){
       }
       target.appendChild(button); i++; continue;
     }
-    var latin = value.slice(i).match(/^[A-Za-z]+(?:['’-][A-Za-z]+)*/);
+    var latin = value.slice(i).match(/^(?:[A-Za-z]+(?:['’-][A-Za-z]+)*|[0-9]+)/);
     if(latin){
       var word = document.createElement("span"); word.className = "mixed-latin"; word.textContent = latin[0];
       target.appendChild(word); i += latin[0].length; continue;
@@ -1647,6 +1706,19 @@ function renderMixedSentenceTokens(text){
     if(ch === " ") punctuation.className = "mixed-space";
     target.appendChild(punctuation); i++;
   }
+}
+function saveCombinedEnglishRecord(result, query){
+  if(!result || (result.kind !== "word" && result.kind !== "sentence") || typeof query !== "string" || !query.trim()) return;
+  var record = {kind:result.kind, query:query, t:Date.now()};
+  if(result.kind === "word"){
+    record.word = result.word;
+    if(typeof result.phonetic === "string") record.phonetic = result.phonetic;
+    if(Array.isArray(result.meanings)) record.meanings = result.meanings;
+  }else if(typeof result.translation === "string"){
+    record.translation = result.translation;
+  }
+  if(result.source && typeof result.source === "object") record.source = result.source;
+  saveEnglishRecord(record);
 }
 function renderCombinedEnglishResult(result, query){
   var box = $("combinedEnglishResult"); if(!box) return;
@@ -1671,7 +1743,7 @@ function renderCombinedEnglishResult(result, query){
   var hint = document.createElement("div"); hint.className = "combined-english-hint"; hint.textContent = "英文结果保留在同一页，不用切换语言"; card.appendChild(hint);
   box.appendChild(card);
 }
-function loadCombinedEnglishResult(query){
+function loadCombinedEnglishResult(query, fromHistory){
   if(!query) return;
   clearCombinedEnglishResult();
   var box = $("combinedEnglishResult"); if(!box) return;
@@ -1684,6 +1756,7 @@ function loadCombinedEnglishResult(query){
       if(seq !== combinedEnglishSeq || controller.signal.aborted) return;
       combinedEnglishController = null;
       if(!result || (result.kind !== "word" && result.kind !== "sentence")){ throw new Error("英文结果格式不正确"); }
+      if(!fromHistory) saveCombinedEnglishRecord(result, query);
       renderCombinedEnglishResult(result, query);
     })
     .catch(function(error){
@@ -1692,11 +1765,11 @@ function loadCombinedEnglishResult(query){
       var errorNode = document.createElement("div"); errorNode.className = "combined-english-error"; errorNode.textContent = "英文解释暂时没出来，原句仍然保留。"; box.appendChild(errorNode);
     });
 }
-function showCombinedSentenceMode(text){
+function showCombinedSentenceMode(text, fromHistory){
   cancelSpeech();
   resetMixedSentenceUI();
-  resultsFromHistory = false;
-  resultsView = {kind:"sentence", text:text, fromHistory:false};
+  resultsFromHistory = !!fromHistory;
+  resultsView = {kind:"sentence", text:text, fromHistory:!!fromHistory};
   $("rTitle").textContent = "📖 你说的是：";
   $("rSub").textContent = "点中文字看笔顺，下面查看 English 的意思";
   var echo = $("voiceEcho");
@@ -1704,10 +1777,10 @@ function showCombinedSentenceMode(text){
   echo.innerHTML = '<span class="mixed-echo-label">🗣 你说的是</span><span id="voiceEchoTxt"></span>';
   echo.style.display = "block";
   renderMixedSentenceTokens(text);
-  showWorkspace("results");
   var chars = $("resultChars"); chars.innerHTML = ""; chars.style.display = "none";
   var phrase = mixedEnglishPhrase(text);
-  if(phrase) loadCombinedEnglishResult(phrase);
+  if(phrase) loadCombinedEnglishResult(phrase, !!fromHistory);
+  showWorkspace("results");
 }
 function handleVoiceResult(text){
   var cleaned = text.replace(/[。，、？！,.?!；;]/g, " "); if(!text.replace(/\s/g,"")){ toast("没听清，再按一次试试"); return; }
@@ -1736,7 +1809,8 @@ function handleVoiceResult(text){
   }
   // 英文单词兜底：识别出纯英文（here/hear 等）→ 回显给孩子确认，而不是"没听清"
   var enWords = text.replace(/[^A-Za-z\s]/g,"").trim().split(/\s+/).filter(function(w){ return w.length >= 2; });
-  if(enWords.length){
+  var numericWords = text.match(/[0-9]+/g) || [];
+  if(enWords.length || numericWords.length){
     recordLookup(); showCombinedSentenceMode(text);
     return;
   }
@@ -1813,15 +1887,15 @@ function shouldUseSelectMode(text){
 }
 // 选字模式：列出句中所有汉字（去停用词去重），让小孩点选要查的字
 // 语音整句模式：识别结果原样输出（保留重复与顺序），渲染成主区域大卡片，点任意字查详情
-function showSentenceMode(text){
+function showSentenceMode(text, fromHistory){
   if(/[A-Za-z]/.test(text)){
-    showCombinedSentenceMode(text);
+    showCombinedSentenceMode(text, !!fromHistory);
     return;
   }
   cancelSpeech();
   resetMixedSentenceUI();
-  resultsFromHistory = false;
-  resultsView = {kind:"sentence", text:text, fromHistory:false};
+  resultsFromHistory = !!fromHistory;
+  resultsView = {kind:"sentence", text:text, fromHistory:!!fromHistory};
   $("rTitle").textContent = "📖 你说的是：";
   var src = window.__asrProvider ? "（" + window.__asrProvider + "识别）" : "";
   $("rSub").textContent = "点句子里的字，看笔顺和部首 " + src;
@@ -1830,7 +1904,6 @@ function showSentenceMode(text){
   var et = $("voiceEchoTxt");
   if(et) et.textContent = text;
   // 整句逐字渲染进主区域（与字卡模式同款大卡片，fitResultCards 自动放大居中）
-  showWorkspace("results");
   var box = $("resultChars"); box.style.display = ""; box.innerHTML = "";
   for(var i=0;i<text.length;i++){
     var ch = text[i];
@@ -1854,7 +1927,9 @@ function showSentenceMode(text){
     }
     box.appendChild(card);
   }
-  requestAnimationFrame(function(){ requestAnimationFrame(fitResultCards); });
+  showWorkspace("results");
+  fitResultCards();
+  requestAnimationFrame(fitResultCards);
   prefetchTTSList((text.match(/[\u4e00-\u9fff]/g) || []).filter(function(c,i,a){ return a.indexOf(c)===i; }), 4);
 }
 function showSelectMode(text){
@@ -1871,9 +1946,10 @@ function showSelectMode(text){
   var best = ranked.length ? ranked[0] : null;
   $("rTitle").textContent = best ? ("📖 你说的是一句话——你想查的可能是「" + best + "」") : "📖 你说的是一句话，里面有几个字——点你要查的那个";
   $("rSub").textContent = "点你要查的那个字";
-  showResultsPage(list, 0);
-  var echo = $("voiceEcho");
-  if(text){ echo.style.display = "block"; $("voiceEchoTxt").textContent = text; }
+  showResultsPage(list, 0, false, false, function(){
+    var echo = $("voiceEcho");
+    if(text){ echo.style.display = "block"; $("voiceEchoTxt").textContent = text; }
+  });
   // 高亮意图字卡片（showResultsPage 渲染到 #resultChars 后执行）
   if(best){
     setTimeout(function(){
@@ -1921,15 +1997,17 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
   var list = chars.filter(function(c){ return DICT[c]; }).slice(0,limit);
   if(!list.length){ toast("字库里还没有这个字"); return; }
   recordLookup();
-  showResultsPage(list, toneNum);
-  var echo = $("voiceEcho");
-  if(rawText){ echo.style.display = "block"; $("voiceEchoTxt").textContent = rawText; }
-  $("rTitle").textContent = "📖 你读的是哪个字？";
-  $("rSub").textContent = toneNum ? "点一下就能看笔顺和部首（第"+toneNum+"声）" : "点一下就能看笔顺和部首";
+  showResultsPage(list, toneNum, false, false, function(){
+    var echo = $("voiceEcho");
+    if(rawText){ echo.style.display = "block"; $("voiceEchoTxt").textContent = rawText; }
+    $("rTitle").textContent = "📖 你读的是哪个字？";
+    $("rSub").textContent = toneNum ? "点一下就能看笔顺和部首（第"+toneNum+"声）" : "点一下就能看笔顺和部首";
+  });
 }
 updateHistoryUI();
 function suspendCapture(){
   micPrewarmToken++;
+  micActivationPending = false;
   if(rec.active || rec.releasePending || rec.recorderObj) cancelRecording();
   else rec.captureSeq++;
   cancelSpeech();
