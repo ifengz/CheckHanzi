@@ -1,14 +1,16 @@
 name: 部署到宝塔服务器
 
-# 触发条件：push 到 main 分支，或手动触发
+# 触发条件：push 到 deploy 分支，或手动触发
 on:
   push:
-    branches: [ main ]
+    branches: [ deploy ]
   workflow_dispatch:
 
 jobs:
   deploy:
     name: rsync 部署
+    # 手动运行也只能发布 deploy，避免从其他分支绕过发布入口。
+    if: github.ref == 'refs/heads/deploy'
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码

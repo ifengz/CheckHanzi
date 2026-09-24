@@ -2,7 +2,7 @@
 
 The production entry is https://hanzi.usfan.net/char-dict.html. The domain root is not the application entry.
 
-Before pushing main:
+Before pushing deploy:
 
 - Read doc/core/lessons.md and the active task plan.
 - Run `node .github/scripts/check-client.mjs` and the dictionary integrity check.
