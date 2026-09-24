@@ -69,6 +69,22 @@ def quiet_tone_recording(amplitude=0.01):
 
 
 class VoiceBackendContractTest(unittest.TestCase):
+    def test_sensevoice_only_uses_itn_for_chinese(self):
+        calls = []
+
+        class FakeRecognizer:
+            @staticmethod
+            def from_sense_voice(**kwargs):
+                calls.append(kwargs)
+                return object()
+
+        fake_sherpa = types.SimpleNamespace(OfflineRecognizer=FakeRecognizer)
+        with patch.dict(sys.modules, {"sherpa_onnx": fake_sherpa}), \
+             patch.object(server_voice.os.path, "exists", return_value=True):
+            server_voice._make_sensevoice("zh")
+            server_voice._make_sensevoice("en")
+        self.assertEqual([call["use_itn"] for call in calls], [True, False])
+
     def test_english_postprocess_preserves_lookup_text(self):
         self.assertEqual(
             server_voice.postprocess_en("<|en|>I have 2 apples, and a friend's book!"),
