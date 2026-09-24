@@ -1941,6 +1941,7 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
 updateHistoryUI();
 function suspendCapture(){
   micPrewarmToken++;
+  micActivationPending = false;
   if(rec.active || rec.releasePending || rec.recorderObj) cancelRecording();
   else rec.captureSeq++;
   cancelSpeech();

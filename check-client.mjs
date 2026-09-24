@@ -499,6 +499,21 @@ function prewarmHarness(permission = 'granted') {
   h.capture.releaseMicStream();
 }
 {
+  const suspendStart = html.indexOf('function suspendCapture(');
+  const suspendEnd = html.indexOf('document.addEventListener("visibilitychange"', suspendStart);
+  const suspendContext = vm.createContext({
+    micPrewarmToken: 1,
+    micActivationPending: true,
+    rec: { active: false, releasePending: false, recorderObj: null, captureSeq: 0 },
+    cancelRecording() {},
+    cancelSpeech() {},
+    resetCaptureAudio() {},
+  });
+  vm.runInContext(html.slice(suspendStart, suspendEnd), suspendContext);
+  suspendContext.suspendCapture();
+  assert.equal(suspendContext.micActivationPending, false, 'backgrounding must release a cancelled activation lock');
+}
+{
   const h = prewarmHarness();
   h.audio.state = 'suspended';
   let resumeCalls = 0;
