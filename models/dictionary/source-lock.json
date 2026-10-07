@@ -13,5 +13,10 @@
     "commit": "68d10a4b21150cae5e1ebbd223eed289cf32d90c",
     "url": "https://github.com/chanind/hanzi-writer-data/tree/68d10a4b21150cae5e1ebbd223eed289cf32d90c",
     "all_json_sha256": "95118b0c4d5cc378a3da49293b1e8e41bbd29eadb2c6544573dfd61f4b00b679"
+  },
+  "jyutping_table": {
+    "url": "https://github.com/lshk-org/jyutping-table/blob/master/list.tsv",
+    "licence": "CC BY 4.0",
+    "sha256": "03cfb718d8d36c6bd886aba6434394e85f6f6a62b563e2dbf2c6a98563c3097e"
   }
 }

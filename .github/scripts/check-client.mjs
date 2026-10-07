@@ -927,23 +927,89 @@ const findByAttribute = (node, name, value) => {
   }
   return null;
 };
+// ── 粤语朗读：语言不能被收敛成中英二值，缓存键必须带粤拼 ──────────
+const ttsLangStart = html.indexOf('function ttsLang(');
+const ttsLangEnd = html.indexOf('function speak(', ttsLangStart);
+assert.ok(ttsLangStart >= 0 && ttsLangEnd > ttsLangStart, 'TTS must keep a three-way language normaliser');
+let langStub = { rows: [{ ch: '银', jp: 'ngan4', state: 'word' }, { ch: '行', jp: 'hong4', state: 'word' }] };
+const langContext = vm.createContext({ yueAlign: () => langStub.rows, TTS_VERSION: /var TTS_VERSION\s*=\s*"([^"]+)"/.exec(html)[1] });
+vm.runInContext(html.slice(ttsLangStart, ttsLangEnd), langContext);
+assert.equal(langContext.ttsLang('yue'), 'yue', 'Cantonese must survive as its own TTS language');
+assert.equal(langContext.ttsLang(undefined), 'zh', 'unknown languages must still fall back to Mandarin');
+assert.equal(langContext.ttsLang('en'), 'en', 'English stays English');
+const yueKey = langContext.ttsKey('银行', 'yue');
+assert.ok(yueKey.includes('ngan4') && yueKey.includes('hong4'), 'the Cantonese cache key must contain the readings');
+assert.notEqual(yueKey, langContext.ttsKey('银行', 'zh'), 'Cantonese and Mandarin audio must never share a cache key');
+langStub = { rows: [{ ch: '银', jp: 'ngan4', state: 'word' }, { ch: '行', jp: 'hang4', state: 'word' }] };
+assert.notEqual(yueKey, langContext.ttsKey('银行', 'yue'), 'different readings of the same text must not reuse one cache entry');
+const readoutStart = html.indexOf('function readoutRow(');
+const readoutEnd = html.indexOf('function renderDetail(', readoutStart);
+assert.ok(readoutStart >= 0 && readoutEnd > readoutStart, 'every readout language must share one tappable row component');
+
 const renderWordsStart = html.indexOf('function renderWords(');
 const renderWordsEnd = html.indexOf('document.addEventListener("pointerdown"', renderWordsStart);
 assert.ok(renderWordsStart >= 0 && renderWordsEnd > renderWordsStart, 'Chinese word cards must be rendered by a dedicated function');
 const wordBox = new TestNode();
 const selectedChineseWords = [];
+const spokenWords = [];
+let wordReadings = 'fa1 do2';
 const wordContext = vm.createContext({
   current: '花',
   $: id => id === 'words' ? wordBox : null,
   document: { createElement: () => new TestNode() },
   esc: text => String(text),
   addHistory: (character, word) => selectedChineseWords.push([character, word]),
-  speak() {},
+  speak(...args) { spokenWords.push(args); },
   fitResultCards() {},
   requestAnimationFrame: callback => callback(),
+  // 粤拼来自构建期离线表 cantonese-data.js；这里给固定桩，只验证词卡真把逐字读法渲染出来
+  yueAlign: word => Array.from(word).map((ch, index) => ({ ch, jp: index === 0 ? 'fa1' : 'do2', state: 'word' })),
+  yueReadings: () => wordReadings,
 });
+vm.runInContext(html.slice(readoutStart, readoutEnd), wordContext);
 vm.runInContext(html.slice(renderWordsStart, renderWordsEnd), wordContext);
 wordContext.renderWords({ w:['花朵'] });
+const yueRow = findByClass(wordBox.children[0], 'readout-row');
+assert.ok(yueRow, 'a word card with Cantonese data must show a tappable readout row');
+assert.equal(yueRow.attributes['data-lang'], 'yue', 'the word card readout row must speak Cantonese');
+assert.match(yueRow.innerHTML, /class="wyue">fa1 do2</, 'Chinese word cards must show the per-character Cantonese reading');
+let rowPropagationStopped = false;
+yueRow.listeners.click({ stopPropagation: () => { rowPropagationStopped = true; } });
+assert.ok(rowPropagationStopped, 'tapping the readout row must not also fire the card action');
+assert.deepEqual(spokenWords, [['花朵', yueRow, 'yue']], 'the readout row must hand its own language to the player');
+wordReadings = '';
+wordContext.renderWords({ w:['花朵'] });
+assert.equal(findByClass(wordBox.children[0], 'readout-row'), null, 'a word without Cantonese data must not render a dead row');
+
+const mixedTokensStart = html.indexOf('function renderMixedSentenceTokens(');
+const mixedTokensEnd = html.indexOf('function clearMixedTokenSelection(', mixedTokensStart);
+assert.ok(mixedTokensStart >= 0 && mixedTokensEnd > mixedTokensStart, 'mixed sentence tokens must be rendered by a dedicated function');
+const echoBox = new TestNode('div');
+const tokenRow = Object.assign(new TestNode('div'), { id: 'mixedTokenRow' });
+const tokenContext = vm.createContext({
+  $: id => (id === 'voiceEcho' ? echoBox : null),
+  document: { createElement: tag => new TestNode(tag) },
+  DICT: { 花: {}, 朵: {} },
+  toast() {},
+  renderMixedChineseDetail() {},
+  renderDetail() {},
+  addHistory() {},
+  current: '',
+  detailFrom: '',
+  // 逐字粤拼由离线表推导；这里固定成「花=fa1 朵=do2」，只验证对齐渲染
+  yueAlign: text => Array.from(text).map((ch, index) => (/[\u3400-\u9fff]/.test(ch)
+    ? { ch, jp: index === 0 ? 'fa1' : 'do2', state: 'word' }
+    : { ch, jp: null, state: 'na' })),
+});
+vm.runInContext(html.slice(mixedTokensStart, mixedTokensEnd), tokenContext);
+tokenContext.renderMixedSentenceTokens('花朵 apple', tokenRow);
+const firstToken = tokenRow.children[0];
+assert.equal(firstToken.className, 'mixed-token', 'each Chinese token must wrap the character and its Cantonese reading');
+assert.ok(findByClass(firstToken, 'mixed-inline-token'), 'the wrapped token must keep the character touch target');
+const firstYue = findByClass(firstToken, 'yue');
+assert.ok(firstYue && firstYue.textContent === 'fa1', 'the Cantonese reading must sit under its own character');
+const latinToken = findByClass(tokenRow, 'mixed-latin-button');
+assert.ok(latinToken && !findByClass(latinToken, 'yue'), 'Latin tokens must not be given a Cantonese reading');
 wordBox.children[0].click();
 assert.deepEqual(selectedChineseWords, [['花', '花朵']], 'selecting a Chinese word must persist the word, not only its current character');
 const englishRoot = new TestNode();

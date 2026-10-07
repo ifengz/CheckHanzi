@@ -508,6 +508,28 @@ async def edge_tts_generate(text: str, lang: str) -> bytes:
             chunks.append(chunk["data"])
     return b"".join(chunks)
 
+
+def azure_tts_generate(ssml: str) -> bytes:
+    """粤语专用：只有 Azure 官方接口能按我们给的粤拼逐字定读法（edge-tts 不吃 SSML）"""
+    import urllib.error
+    import urllib.request
+    key = os.environ.get("AZURE_SPEECH_KEY", "").strip()
+    region = os.environ.get("AZURE_SPEECH_REGION", "").strip()
+    if not key or not region:
+        raise RuntimeError("粤语朗读未配置（缺 AZURE_SPEECH_KEY / AZURE_SPEECH_REGION）")
+    req = urllib.request.Request(f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1",
+                                 data=ssml.encode("utf-8"), method="POST",
+                                 headers={"Ocp-Apim-Subscription-Key": key,
+                                          "Content-Type": "application/ssml+xml",
+                                          "X-Microsoft-OutputFormat": voice_audio.AZURE_OUTPUT_FORMAT,
+                                          "User-Agent": "chazi-voice"})
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as error:
+        # Azure 的 400 不带正文，只能把状态码记下来（音素写错就是这个）
+        raise RuntimeError(f"Azure 合成失败 HTTP {error.code}")
+
 @app.route("/api/tts", methods=["GET"])
 def tts_handler():
     text = request.args.get("text", "").strip()
@@ -520,7 +542,10 @@ def tts_handler():
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
     voice = voice_audio.voice_for_language(lang)
-    key = voice_audio.tts_cache_key(text, lang, voice)
+    readings = request.args.get("readings", "").strip()
+    if lang == "yue" and not readings:
+        return jsonify({"error": "粤语朗读缺少 readings（与汉字逐字对应的粤拼）"}), 400
+    key = voice_audio.tts_cache_key(text, lang, voice, readings)
     cache_path = os.path.join(TTS_CACHE_DIR, key + ".mp3")
     if os.path.exists(cache_path) and os.path.getsize(cache_path) > 500:
         try:
@@ -529,7 +554,14 @@ def tts_handler():
         except Exception:
             pass
     try:
-        source_mp3 = asyncio.run(asyncio.wait_for(edge_tts_generate(text, lang), timeout=12))
+        if lang == "yue":
+            try:
+                ssml = voice_audio.azure_ssml(text, readings, voice)
+            except voice_audio.VoiceAudioError as error:
+                return jsonify({"error": str(error)}), 400
+            source_mp3 = azure_tts_generate(ssml)
+        else:
+            source_mp3 = asyncio.run(asyncio.wait_for(edge_tts_generate(text, lang), timeout=12))
         if not source_mp3:
             return jsonify({"error": "生成失败"}), 500
         mp3_data = voice_audio.normalize_mp3_bytes(source_mp3)

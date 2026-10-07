@@ -8,6 +8,7 @@
 <title>查字宝 - 儿童查字</title>
 <script src="models/strokes/hanzi-writer.min.js"></script>
 <script src="models/dictionary/character-data.js"></script>
+<script src="models/dictionary/cantonese-data.js"></script>
 
 <style>*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;outline:none;}
 html,body{height:100%;overflow:hidden;}
@@ -86,6 +87,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .mixed-token-row .mixed-inline-token{display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:56px;padding:6px 8px;border:0;border-bottom:2px solid #E6DCCF;border-radius:4px;background:transparent;color:#2D2A26;font:inherit;font-size:clamp(24px,3.5vh,44px);font-weight:800;line-height:1.1;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .mixed-token-row .mixed-inline-token:active,.mixed-token-row .mixed-inline-token.selected{border-bottom-color:#216C76;background:#E9F5F4;color:#216C76;}
 .mixed-token-row .mixed-inline-token:focus-visible{outline:2px solid #216C76;outline-offset:3px;}
+.mixed-token-row .mixed-token{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.mixed-token-row .yue{font-size:clamp(15px,1.9vh,20px);line-height:1.1;color:#216C76;font-weight:700;max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mixed-token-row .yue.maybe::after{content:"?";color:#9a8f7e;font-weight:600;}
+.mixed-token-row .yue.blank{visibility:hidden;}
 .mixed-translation{flex-shrink:0;min-height:clamp(24px,3vh,36px);padding:0 4px;text-align:center;color:#927B6C;font-size:clamp(14px,1.8vh,18px);line-height:1.45;}
 .mixed-translation.loading{color:#B8A080;}
 .mixed-detail-divider{flex-shrink:0;height:1px;margin:clamp(12px,2vh,22px) 0 0;background:#E6DCCF;}
@@ -106,10 +111,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{grid-column:2;grid-row:4;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-self:stretch;}
 #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card{min-width:0;min-height:clamp(86px,11vh,132px);padding:14px 8px;justify-content:center;}
 #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card .w{font-size:clamp(26px,4vh,38px);line-height:1.25;letter-spacing:0;white-space:nowrap;}
+#mixedDetailHost > #detailBody #words .readout-row{min-height:44px;border:0;border-radius:0;background:transparent;padding:0;gap:4px;justify-content:center;}
+#mixedDetailHost > #detailBody #words .readout-row .wyue{font-size:clamp(13px,1.7vh,16px);}
 #mixedDetailHost > #detailBody #detailPinyin{font-size:clamp(58px,7vh,72px);}
+#mixedDetailHost > #detailBody #detailYue .readout-row{font-size:clamp(24px,3.2vh,32px);}
 .mixed-detail-host[hidden]{display:none;}
 .mixed-detail{width:100%;}
 .mixed-detail-speak{min-width:clamp(72px,9vw,112px);min-height:clamp(44px,5.5vh,58px);padding:8px 12px;border:0;border-radius:14px;background:#216C76;color:#fff;font-size:clamp(14px,1.9vh,18px);font-weight:800;cursor:pointer;touch-action:manipulation;}
+.mixed-yue-sentence{display:block;margin:2px auto 0;background:#2E7D6B;}
+.echo-yue-sentence{min-width:120px;min-height:38px;padding:5px 12px;font-size:14px;margin-top:6px;}
 .mixed-detail-label{margin-top:clamp(12px,1.6vh,18px);font-size:clamp(16px,2.2vh,22px);font-weight:700;color:#6C6259;}
 .mixed-detail-words{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
 .mixed-detail-word{min-height:56px;padding:8px 14px;border:0;border-bottom:2px solid #E6DCCF;border-radius:4px;background:transparent;color:#2D2A26;font-size:clamp(24px,3.4vh,30px);font-weight:700;cursor:pointer;touch-action:manipulation;}
@@ -134,6 +144,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #detailBody{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(2px,.4vh,8px);overflow-y:auto;overflow-x:hidden;padding:0 clamp(10px,1.6vw,16px) clamp(12px,1.6vh,16px);justify-content:flex-start;}
 .char-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:clamp(14px,2vh,28px);border:3px solid #F0E0C8;padding:clamp(8px,1.2vh,14px) clamp(12px,2vw,16px);flex:0 0 auto;min-height:0;box-shadow:0 4px 16px rgba(0,0,0,.04);}
 #detailPinyin{font-size:56px;line-height:1.3;color:#BB8C4F;font-weight:700;letter-spacing:0;margin-bottom:clamp(1px,.3vh,6px);flex-shrink:0;}
+#detailYue{width:100%;display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-bottom:clamp(1px,.3vh,6px);}
+.readout-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:48px;padding:4px 12px;border:2px solid #9CC6BD;border-radius:14px;background:#F2FAF8;color:#216C76;font-weight:700;font-family:inherit;line-height:1.2;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.readout-row:active{transform:scale(.97);background:#DFF1EC;}
+.readout-row.loading{outline:3px solid #528BBF;outline-offset:2px;}
+.readout-row .ro-spk{font-size:.8em;flex-shrink:0;}
+#detailYue .readout-row{font-size:clamp(26px,3.4vh,36px);}
+.note{font-size:15px;color:#9a8f7d;font-weight:600;margin-left:6px;}
+.word-card .wyue{font-size:clamp(15px,2vh,20px);color:#216C76;font-weight:700;line-height:1.15;letter-spacing:0;}
+.word-card .readout-row{min-height:44px;padding:2px 8px;gap:6px;border-radius:10px;}
 #detailChar{font-size:280px;font-weight:400;line-height:1.5;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;max-width:100%;overflow:visible;white-space:nowrap;flex-shrink:0;}
 #detailChar.has-stroke-glyph{position:relative;display:block;width:1em;height:1.5em;}
 #detailChar .detail-glyph{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;}
@@ -345,6 +364,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
       <div class="char-hero">
         <div id="detailPinyin"></div>
         <div id="detailChar">大</div>
+        <div id="detailYue"></div>
         <div id="detailMeta"></div>
       </div>
       <div class="detail-learning">
@@ -551,9 +571,32 @@ function cancelSpeech(){
   ttsActiveRequest = null; ttsActiveText = null; ttsActiveLang = "zh";
   stopTTSPlayback(); clearTTSButtons();
 }
-function ttsKey(text, lang){ return String(lang === "en" ? "en" : "zh") + "|v" + TTS_VERSION + "|" + text; }
+function ttsLang(value){ return value === "en" ? "en" : (value === "yue" ? "yue" : "zh"); }
+function yueReadings(text){
+  var rows = yueAlign(text), list = [];
+  for(var i = 0; i < rows.length; i++){
+    if(rows[i].state === "na") continue;
+    if(!rows[i].jp) return "";
+    list.push(rows[i].jp);
+  }
+  return list.join(" ");
+}
+function yueSentenceText(text){
+  var rows = yueAlign(text), out = "";
+  for(var i = 0; i < rows.length; i++){
+    if(rows[i].state === "na"){ if(/[，。！？；：、]/.test(rows[i].ch)) out += rows[i].ch; continue; }
+    out += rows[i].ch;
+  }
+  return out;
+}
+function ttsKey(text, lang){
+  lang = ttsLang(lang);
+  var readings = lang === "yue" ? yueReadings(text) : "";
+  return lang + "|v" + TTS_VERSION + "|" + (readings ? readings + "|" : "") + text;
+}
 function speak(text, btn, lang){
-  lang = lang === "en" ? "en" : "zh";
+  lang = ttsLang(lang);
+  if(lang === "yue" && !yueReadings(text)){ toast("这个词没有粤拼数据，暂时不能朗读"); return; }
   ensureAudio();
   var seq = ++ttsRequestSeq;
   if(ttsActiveRequest && (ttsActiveText !== text || ttsActiveLang !== lang)){ try{ ttsActiveRequest.abort(); }catch(e){} }
@@ -1080,6 +1123,44 @@ window.addEventListener("resize", function(){
     var box = $("strokes"); fitStrokeCells(box, box.querySelectorAll(".stroke-cell").length);
   });
 });
+// ── 粤语读法：读构建期离线表，运行时零网络、零供应商 ──────────────
+function yueData(){ return (typeof CANTONESE_DATA !== "undefined" && CANTONESE_DATA) ? CANTONESE_DATA : null; }
+function yueAlign(text){
+  var data = yueData(), out = [], i = 0, value = String(text || "");
+  if(!data) return out;
+  while(i < value.length){
+    var ch = value[i];
+    if(!/[\u3400-\u9fff]/.test(ch)){ out.push({ ch: ch, jp: null, state: "na" }); i++; continue; }
+    var hit = null;
+    for(var len = 4; len >= 2; len--){
+      var candidate = value.substr(i, len);
+      if(candidate.length === len && data.word[candidate]){ hit = { word: candidate, list: data.word[candidate] }; break; }
+    }
+    if(hit){
+      for(var k = 0; k < hit.word.length; k++) out.push({ ch: hit.word[k], jp: hit.list[k], state: "word", word: hit.word });
+      i += hit.word.length; continue;
+    }
+    var entry = data.char[ch];
+    if(!entry || !entry.a || !entry.a.length){ out.push({ ch: ch, jp: null, state: "none" }); i++; continue; }
+    if(entry.a.length === 1){ out.push({ ch: ch, jp: entry.a[0], state: "single" }); i++; continue; }
+    out.push({ ch: ch, jp: entry.t || entry.a[0], state: "maybe", all: entry.a }); i++;
+  }
+  return out;
+}
+function yueLabel(row){
+  if(!row || !row.jp) return "";
+  if(row.state === "maybe") return esc(row.jp) + '<span class="note">?</span>';
+  return esc(row.jp);
+}
+// 读法条：一行一种读法，整行可点，行尾图标表示"点这里能听"
+function readoutRow(lang, text, labelHtml, labelClass, ariaText){
+  var row = document.createElement("button");
+  row.type = "button"; row.className = "readout-row"; row.setAttribute("data-lang", lang);
+  row.innerHTML = '<span class="' + labelClass + '">' + labelHtml + '</span><span class="ro-spk" aria-hidden="true">🔊</span>';
+  row.setAttribute("aria-label", ariaText);
+  row.addEventListener("click", function(event){ event.stopPropagation(); speak(text, row, lang); });
+  return row;
+}
 function renderDetail(toneNum){
   restoreMixedChineseDetail();
   cancelSpeech();
@@ -1096,6 +1177,12 @@ function renderDetail(toneNum){
   var pys = Array.isArray(data.p) ? data.p : [data.p];
   if(toneNum){ var picked = pys.filter(function(p){ return detectTone(p) === toneNum; }); if(picked.length) pys = picked; }
   $("detailPinyin").textContent = pys[0];
+  var yueEl = $("detailYue");
+  if(yueEl){
+    var yueRow = yueAlign(current)[0];
+    yueEl.innerHTML = "";
+    if(yueRow && yueRow.jp && yueReadings(current)) yueEl.appendChild(readoutRow("yue", current, yueLabel(yueRow), "yue", "用粤语读「" + current + "」"));
+  }
   fitDetailChar();
   $("detailChar").onclick = function(){ speak(current, this); };
   renderRadical(current); renderStrokes(); renderWords(data);
@@ -1109,8 +1196,8 @@ function fitDetailChar(){
   var size = Math.min(mixedActive && landscapeGrid ? 360 : 280, Math.floor((hero.clientWidth - 28) * 0.88));
   if(landscapeGrid){
     var heroStyle = getComputedStyle(hero);
-    var fixedHeight = $("detailPinyin").getBoundingClientRect().height + $("detailMeta").getBoundingClientRect().height
-      + parseFloat(getComputedStyle($("detailPinyin")).marginBottom) + parseFloat(getComputedStyle($("detailMeta")).marginTop);
+    var fixedHeight = $("detailPinyin").getBoundingClientRect().height + $("detailYue").getBoundingClientRect().height + $("detailMeta").getBoundingClientRect().height
+      + parseFloat(getComputedStyle($("detailPinyin")).marginBottom) + parseFloat(getComputedStyle($("detailYue")).marginBottom) + parseFloat(getComputedStyle($("detailMeta")).marginTop);
     var availableHeight = hero.clientHeight - parseFloat(heroStyle.paddingTop) - parseFloat(heroStyle.paddingBottom)
       - parseFloat(heroStyle.borderTopWidth) - parseFloat(heroStyle.borderBottomWidth);
     size = Math.min(size, Math.floor((availableHeight - fixedHeight) / 1.5));
@@ -1210,7 +1297,13 @@ function renderWords(data){
   words.slice(0,3).forEach(function(word){
     var card = document.createElement("div"); card.className = "word-card";
     var hi = word.split("").map(function(c){ return c===current ? "<u>"+esc(c)+"</u>" : esc(c); }).join("");
+    var yueRows = yueAlign(word);
     card.innerHTML = '<div class="w">'+hi+'</div>';
+    if(yueReadings(word)){
+      var yueText = yueRows.map(function(row){ return row.jp; }).join(" ");
+      var yueDoubt = yueRows.some(function(row){ return row.state === "maybe"; });
+      card.appendChild(readoutRow("yue", word, esc(yueText) + (yueDoubt ? '<span class="note">?</span>' : ""), "wyue", "用粤语读「" + word + "」"));
+    }
     card.onclick = function(){ addHistory(current, word); speak(word, card); };
     box.appendChild(card);
   });
@@ -1441,14 +1534,16 @@ function startRecTips(el){
 function stopRecTips(){ if(rec.tipTimer){ clearInterval(rec.tipTimer); rec.tipTimer = null; } }
 // 预加载读音：页面显示时后台提前下好音频，点击时复用同一个在途请求。
 function prefetchTTS(text, lang){
-  lang = lang === "en" ? "en" : "zh";
+  lang = ttsLang(lang);
   if(!text) return Promise.reject(new Error("缺少朗读内容"));
+  var readings = lang === "yue" ? yueReadings(text) : "";
+  if(lang === "yue" && !readings) return Promise.reject(new Error("缺少粤拼数据"));
   var key = ttsKey(text, lang);
   if(ttsCache[key]) return Promise.resolve(ttsCache[key]);
   if(prefetching[key]) return prefetching[key].promise;
   var x = new XMLHttpRequest();
   var promise = new Promise(function(resolve, reject){
-    x.open("GET","/api/tts?text="+encodeURIComponent(text)+"&lang="+lang+"&v="+TTS_VERSION,true); x.responseType="arraybuffer"; x.timeout=8000;
+    x.open("GET","/api/tts?text="+encodeURIComponent(text)+"&lang="+lang+"&v="+TTS_VERSION+(readings ? "&readings="+encodeURIComponent(readings) : ""),true); x.responseType="arraybuffer"; x.timeout=8000;
     x.onload = function(){
       if(x.status !== 200 || !x.response || x.response.byteLength <= 500){ reject(new Error("朗读服务返回失败")); return; }
       try{ ensureAudio(); audioCtx.decodeAudioData(x.response).then(function(buf){
@@ -1702,6 +1797,7 @@ function renderMixedSentenceTokens(text, tokenTarget){
   var inline = !!tokenTarget && tokenTarget.id === "mixedTokenRow";
   target.textContent = "";
   var value = String(text || "");
+  var aligned = inline ? yueAlign(value) : [];
   var i = 0;
   while(i < value.length){
     var ch = value[i];
@@ -1717,7 +1813,18 @@ function renderMixedSentenceTokens(text, tokenTarget){
         button.classList.add("missing");
         (function(z){ button.addEventListener("click", function(){ toast("「" + z + "」还没收进词库"); }); })(ch);
       }
-      target.appendChild(button); i++; continue;
+      if(inline){
+        var holder = document.createElement("span"); holder.className = "mixed-token";
+        var row = aligned[i] || null;
+        var tag = document.createElement("span");
+        tag.className = "yue" + (row && row.jp ? "" : " blank") + (row && row.state === "maybe" ? " maybe" : "");
+        tag.textContent = row && row.jp ? row.jp : "·";
+        if(row && row.all && row.all.length) tag.title = "这个字有 " + row.all.length + " 个读法：" + row.all.join(" / ");
+        holder.appendChild(button); holder.appendChild(tag); target.appendChild(holder);
+      }else{
+        target.appendChild(button);
+      }
+      i++; continue;
     }
     var latin = value.slice(i).match(/^(?:[A-Za-z]+(?:['’-][A-Za-z]+)*|[0-9]+)/);
     if(latin){
@@ -1935,6 +2042,8 @@ function showCombinedSentenceMode(text, fromHistory){
   box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-token-row" id="mixedTokenRow"></div><div class="mixed-translation loading" id="mixedTranslation" aria-live="polite">正在查中文意思…</div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
   showWorkspace("results");
   renderMixedSentenceTokens(text, $("mixedTokenRow"));
+  var yueSentenceBtn = yueSentenceButtonEl(text);
+  if(yueSentenceBtn) $("mixedTokenRow").insertAdjacentElement("afterend", yueSentenceBtn);
   var phrase = mixedEnglishPhrase(text);
   if(phrase) loadCombinedEnglishResult(phrase, !!fromHistory);
 }
@@ -2043,6 +2152,16 @@ function shouldUseSelectMode(text){
 }
 // 选字模式：列出句中所有汉字（去停用词去重），让小孩点选要查的字
 // 语音整句模式：识别结果原样输出（保留重复与顺序），渲染成主区域大卡片，点任意字查详情
+function yueSentenceButtonEl(text, extraClass){
+  var sentence = yueSentenceText(text);
+  if(!sentence || !yueReadings(sentence)) return null;
+  var btn = document.createElement("button");
+  btn.type = "button"; btn.className = "mixed-detail-speak " + (extraClass || "mixed-yue-sentence");
+  btn.textContent = "🔊 粤语整句";
+  btn.setAttribute("aria-label", "用粤语朗读这句");
+  btn.addEventListener("click", function(){ speak(sentence, btn, "yue"); });
+  return btn;
+}
 function showSentenceMode(text){
   if(/[A-Za-z]/.test(text)){
     showCombinedSentenceMode(text);
@@ -2059,6 +2178,9 @@ function showSentenceMode(text){
   echo.style.display = "block";
   var et = $("voiceEchoTxt");
   if(et) et.textContent = text;
+  var echoBtn = yueSentenceButtonEl(text, "mixed-yue-sentence echo-yue-sentence");
+  echo.querySelectorAll(".echo-yue-sentence").forEach(function(node){ node.remove(); });
+  if(echoBtn){ echo.appendChild(document.createElement("br")); echo.appendChild(echoBtn); }
   // 整句逐字渲染进主区域（与字卡模式同款大卡片，fitResultCards 自动放大居中）
   showWorkspace("results");
   var box = $("resultChars"); box.style.display = ""; box.innerHTML = "";

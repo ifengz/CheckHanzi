@@ -34,6 +34,29 @@ assert.ok(ext && ext.chars && ext.pinyin && ext.radicals && typeof ext.strokeCha
 assert.ok(Object.keys(ext.chars).length >= 8105, "dictionary coverage is below the required floor");
 assert.ok([...ext.strokeChars].length >= 9000, "local stroke coverage is below 9000 characters");
 assert.ok(!page.includes("models/strokes/stroke_data.json"), "page must not prefetch the legacy full stroke bundle");
+
+// ── 粤语离线表（构建期生成，运行时零网络）────────────────────────
+const cantoneseContext = {};
+vm.runInNewContext(fs.readFileSync(path.join(root, "models/dictionary/cantonese-data.js"), "utf8"), cantoneseContext);
+const yue = cantoneseContext.CANTONESE_DATA;
+assert.ok(yue && yue.meta && yue.char && yue.word && Array.isArray(yue.unverified), "invalid generated Cantonese table");
+assert.match(page, /<script src="models\/dictionary\/cantonese-data\.js"><\/script>/, "page must load the Cantonese table");
+assert.match(sourceLock.jyutping_table.sha256, /^[0-9a-f]{64}$/, "Cantonese jyutping table checksum is missing");
+assert.equal(sourceLock.jyutping_table.licence, "CC BY 4.0", "Cantonese jyutping table licence must be recorded");
+assert.ok(Object.keys(yue.char).length >= 3400, "Cantonese character coverage is below the required floor");
+assert.ok(Object.keys(yue.word).length >= 7200, "Cantonese word coverage is below the required floor");
+const cantoneseUnverified = new Set(yue.unverified);
+for (const [word, readings] of Object.entries(yue.word)) {
+  assert.equal(readings.length, [...word].length, `Cantonese readings must align per character: ${word}`);
+  assert.ok(!cantoneseUnverified.has(word), `a word cannot be both verified and unverified: ${word}`);
+  for (const [index, char] of [...word].entries()) {
+    const entry = yue.char[char];
+    assert.ok(entry, `Cantonese word uses a character with no reading entry: ${word}`);
+    assert.ok(entry.a.includes(readings[index]), `Cantonese reading is outside the official candidates: ${word}[${index}]=${readings[index]}`);
+  }
+}
+const cantoneseWords = Object.keys(yue.word).length;
+assert.ok(cantoneseUnverified.size / (cantoneseUnverified.size + cantoneseWords) < 0.02, "over 2% of words fall back to engine guesses; review the Cantonese sources");
 assert.equal(pinyinKey("lǚ"), "lv", "umlaut pinyin must not collapse into lu");
 assert.equal(pinyinKey("nǚ"), "nv", "umlaut pinyin must not collapse into nu");
 for (const [ch, data] of Object.entries(ext.chars)) {
