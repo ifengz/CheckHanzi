@@ -32,6 +32,11 @@ class VoiceAudioError(RuntimeError):
     pass
 
 
+class ReadingRejectedError(VoiceAudioError):
+    """上游说这个读法它发不出来（4xx）：是送进去的粤拼问题，不是我们连不上上游。"""
+    pass
+
+
 def parse_language(value: str) -> str:
     language = (value or "zh").strip().lower()
     if language not in TTS_VOICES:

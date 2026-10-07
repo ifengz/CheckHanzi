@@ -527,7 +527,9 @@ def azure_tts_generate(ssml: str) -> bytes:
         with urllib.request.urlopen(req, timeout=12) as resp:
             return resp.read()
     except urllib.error.HTTPError as error:
-        # Azure 的 400 不带正文，只能把状态码记下来（音素写错就是这个）
+        # Azure 的 400 不带正文：音素它发不出来属于参数错（4xx），只有 5xx 才是上游故障
+        if 400 <= error.code < 500:
+            raise voice_audio.ReadingRejectedError(f"Azure 不接受这个读法 HTTP {error.code}")
         raise RuntimeError(f"Azure 合成失败 HTTP {error.code}")
 
 @app.route("/api/tts", methods=["GET"])
@@ -565,6 +567,9 @@ def tts_handler():
         if not source_mp3:
             return jsonify({"error": "生成失败"}), 500
         mp3_data = voice_audio.normalize_mp3_bytes(source_mp3)
+    except voice_audio.ReadingRejectedError as error:
+        print(f"[tts] {error}", flush=True)
+        return jsonify({"error": str(error)}), 400
     except voice_audio.VoiceAudioError as error:
         print(f"[tts] {error}", flush=True)
         return jsonify({"error": "朗读音频处理失败"}), 502
