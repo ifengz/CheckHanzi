@@ -22,6 +22,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        if self.path.split("?")[0].endswith((".html", ".js")):
+            self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
     def target(self):
