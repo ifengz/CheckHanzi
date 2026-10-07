@@ -24,7 +24,8 @@ assert.match(html, /id="combinedEnglishResult"/, 'combined results must reserve 
 assert.match(html, /function showCombinedSentenceMode\(/, 'mixed speech must render through the combined result mode');
 assert.match(html, /className\s*=\s*['"]mixed-char-button['"]/, 'Chinese characters in a mixed sentence must keep individual touch targets');
 assert.match(html, /hanzi\.length >= 2 \|\| \(hanzi\.length >= 1 && hasLatin\)/, 'mixed Chinese and Latin speech must use the sentence result view');
-assert.match(html, /function showSentenceMode\(text\)\{\s*if\(\/\[A-Za-z\]\/.test\(text\)\)/, 'sentence history must restore the same combined result view');
+assert.match(html, /function showSentenceMode\(text\)\{\s*showCombinedSentenceMode\(text\);\s*\}/, 'every sentence must restore through the one combined result view');
+assert.equal((html.match(/var isMixedSentence/g) || []).length, 0, 'a pure Chinese sentence must not fall back to a second sentence layout');
 
 const lookupCounterStart = html.indexOf('var lookupCount = 0;');
 const lookupCounterEnd = html.indexOf('function showWorkspace(', lookupCounterStart);
@@ -118,6 +119,7 @@ const asrContext = vm.createContext({
   audioCtx: { sampleRate: 16000 },
   resample: samples => samples,
   floatToWav: () => new Blob(),
+  document: { getElementById: () => null },
   window: {},
 });
 vm.runInContext(html.slice(asrStart, asrEnd), asrContext);
@@ -976,6 +978,7 @@ const zhRow = findByAttribute(cardNode, 'data-lang', 'zh');
 const yueRow = findByAttribute(cardNode, 'data-lang', 'yue');
 assert.ok(zhRow && yueRow, 'a word card must show tappable Mandarin and Cantonese rows');
 assert.match(yueRow.innerHTML, /class="wyue">fa1 do2</, 'Chinese word cards must show the per-character Cantonese reading');
+assert.ok(!yueRow.innerHTML.includes('?') && !/class="note"/.test(html), 'the Cantonese row must not carry a doubt marker: it changes the audio not at all');
 let rowPropagationStopped = false;
 yueRow.listeners.click({ stopPropagation: () => { rowPropagationStopped = true; } });
 assert.ok(rowPropagationStopped, 'tapping the readout row must not also fire the card action');
@@ -1429,4 +1432,21 @@ assert.deepEqual(EnglishHistoryCalls, [['older', false, true, true]], 'opening a
 historyContext.returnFromEnglishHistory();
 historyElement('histBack').click();
 assert.deepEqual(restoredEnglishViews, [originalEnglishHistoryView], 'English history exit must restore the result that originally opened history');
-console.log('Client syntax, audio resampling, and umlaut pinyin checks passed');
+// 笔顺格子：每行最多 8 个，并且要把整行宽度用满（孩子看不清就是这两条被破坏）
+const fitStart = html.indexOf('function fitStrokeCells(');
+const fitEnd = html.indexOf('\n}', fitStart) + 2;
+assert.ok(fitStart >= 0 && fitEnd > fitStart, 'the stroke cell fitter must exist');
+const fitBox = vm.runInNewContext(`(${html.slice(fitStart, fitEnd)})`, { getComputedStyle: () => ({ columnGap: '8px' }) }) ;
+for (const W of [320, 423, 706, 997, 1304, 1764, 2224, 3000]) {
+  for (const n of [1, 4, 8, 10, 17]) {
+    const cells = Array.from({ length: n }, () => ({ style: {} }));
+    const box = { clientWidth: W, style: {}, querySelectorAll: (sel) => (sel === '.stroke-cell' ? cells : []) };
+    fitBox(box, n);
+    const size = parseFloat(cells[0].style.width);
+    assert.ok(size >= 64, `stroke cells must stay tappable at width ${W} with ${n} strokes, got ${size}px`);
+    const perRow = Math.min(n, Math.floor((W + 8) / (size + 8)));
+    assert.ok(perRow <= 8, `a ${W}px panel would fit ${perRow} stroke cells per row for ${n} strokes (cell ${size}px)`);
+    if (n >= 8) assert.ok(perRow >= 4, `stroke cells waste the row at width ${W}: only ${perRow} fit (${size}px)`);
+  }
+}
+console.log('Client syntax, audio resampling, umlaut pinyin, and stroke grid checks passed');

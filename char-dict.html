@@ -59,13 +59,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #results .r-title{font-size:clamp(18px,3vh,28px);font-weight:800;text-align:center;margin-top:clamp(4px,.6vh,12px);flex-shrink:0;}
 #results .r-sub{font-size:clamp(14px,2vh,18px);color:#B8A080;text-align:center;flex-shrink:0;}
 #resMainArea{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-start;align-items:center;gap:clamp(8px,1.2vh,16px);padding:clamp(4px,.8vh,12px) clamp(12px,2vw,20px);overflow-y:auto;overflow-x:hidden;}
-#resultChars{display:flex;width:100%;justify-content:center;align-items:center;gap:clamp(12px,2vh,24px);flex-wrap:wrap;flex-shrink:0;}
+#resultChars{display:grid;width:100%;grid-template-columns:repeat(auto-fill,minmax(clamp(120px,15vw,220px),1fr));gap:clamp(12px,2vh,24px);flex-shrink:0;}
 #combinedEnglishResult{display:none;width:100%;min-width:0;flex-shrink:0;}
 #combinedEnglishResult.show{display:block;}
 #combinedEnglishResult[hidden]{display:none;}
-.mixed-echo{display:block!important;margin:clamp(6px,1vh,12px) clamp(12px,2vw,20px) 0!important;padding:clamp(10px,1.5vh,16px) clamp(12px,2vw,20px)!important;background:#fff!important;border:3px solid #F0E0C8;border-radius:clamp(16px,2vh,24px);box-shadow:0 4px 16px rgba(0,0,0,.05);color:#2D2A26!important;}
-.mixed-echo .mixed-echo-label{display:block;margin-bottom:clamp(7px,1vh,10px);font-size:clamp(13px,1.8vh,17px);font-weight:800;color:#B8A080;}
-.mixed-echo #voiceEchoTxt{display:flex;align-items:center;flex-wrap:wrap;gap:clamp(5px,.7vw,9px);font-size:clamp(24px,3.5vh,44px);line-height:1.35;}
 .mixed-char-button{min-width:clamp(46px,5.5vh,66px);min-height:clamp(50px,6.5vh,74px);padding:clamp(2px,.4vh,6px) clamp(7px,1vw,12px);border:3px solid #FFD19C;border-radius:clamp(12px,1.6vh,18px);background:#FFF4E4;color:#2D2A26;font:inherit;font-weight:800;line-height:1;cursor:pointer;touch-action:manipulation;}
 .mixed-char-button:active,.mixed-char-button.pressed{transform:scale(.94);border-color:#FF9D3C;background:#FFE7C2;}
 .mixed-char-button.missing{opacity:.5;}
@@ -82,33 +79,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .mixed-token-row .mixed-token{display:inline-flex;align-items:center;border-radius:10px;transition:background .12s;}
 
 
-.mixed-token-row .yue{font-size:clamp(15px,1.9vh,20px);line-height:1.1;color:#216C76;font-weight:700;max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.mixed-token-row .yue.maybe::after{content:"?";color:#9a8f7e;font-weight:600;}
-.mixed-token-row .yue.blank{visibility:hidden;}
 .mixed-detail-divider{flex-shrink:0;height:1px;margin:clamp(12px,2vh,22px) 0 0;background:#E6DCCF;}
 .mixed-detail-host{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:clamp(12px,1.8vh,20px) 0 0;}
 .mixed-detail-host.mixed-chinese-active:not([hidden]){display:flex;overflow:hidden;background:transparent;}
-#mixedDetailHost > #detailBody{background:transparent;padding:4px 6px 6px;gap:clamp(18px,2vw,30px);grid-template-columns:minmax(340px,40%) minmax(0,1fr);}
-#mixedDetailHost > #detailBody .char-hero{padding:16px 20px 16px 0;}
-#mixedDetailHost > #detailBody .detail-learning{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto auto;gap:clamp(10px,1.5vh,18px) clamp(14px,1.8vw,24px);padding:0 2px 4px 0;overflow:auto;align-content:stretch;}
-#mixedDetailHost > #detailBody .detail-learning > .sec-label:first-child{grid-column:1 / -1;grid-row:1;}
-#mixedDetailHost > #detailBody .detail-learning > #strokes{grid-column:1 / -1;grid-row:2;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection{grid-column:1 / -1;grid-row:3;min-width:0;display:flex;align-items:stretch;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-card{width:100%;min-height:148px;height:100%;padding:16px 18px;align-items:flex-start;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-badge{width:72px;height:72px;font-size:52px;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-detail{font-size:clamp(15px,2.1vh,20px);line-height:1.5;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label{grid-column:1 / -1;grid-row:4;align-self:end;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{grid-column:1 / -1;grid-row:5;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-self:start;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card{min-width:0;width:100%}
-#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card{min-width:0;min-height:clamp(86px,11vh,132px);padding:14px 8px;justify-content:center;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card .w{font-size:clamp(26px,4vh,38px);line-height:1.25;letter-spacing:0;white-space:nowrap;}
-#mixedDetailHost > #detailBody #words .readout-row{min-height:44px;border:0;border-radius:0;background:transparent;padding:0;gap:4px;justify-content:center;}
-#mixedDetailHost > #detailBody #words .readout-row .wyue{font-size:clamp(13px,1.7vh,16px);}
-#mixedDetailHost > #detailBody #detailPinyin{font-size:clamp(58px,7vh,72px);}
-#mixedDetailHost > #detailBody #detailYue .readout-row{font-size:clamp(24px,3.2vh,32px);}
 .mixed-detail-host[hidden]{display:none;}
 .mixed-detail-loading,.mixed-detail-error{padding:10px 0;color:#927B6C;font-size:clamp(15px,2vh,19px);}
-.char-card{min-width:clamp(120px,15vw,220px);flex:1;max-width:clamp(170px,27vw,280px);background:#fff;border:3px solid #FFE0B8;border-radius:clamp(14px,2vh,24px);padding:clamp(12px,2vh,24px) clamp(12px,1.8vw,18px) clamp(12px,2vh,22px);display:flex;flex-direction:column;align-items:center;box-shadow:0 6px 20px rgba(255,122,0,.12);transition:transform .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.char-card{min-width:0;background:#fff;border:3px solid #FFE0B8;border-radius:clamp(14px,2vh,24px);padding:clamp(12px,2vh,24px) clamp(12px,1.8vw,18px) clamp(12px,2vh,22px);display:flex;flex-direction:column;align-items:center;box-shadow:0 6px 20px rgba(255,122,0,.12);transition:transform .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .char-card .zi{font-size:96px;line-height:1.5;flex-shrink:0;font-weight:400;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;}
 .char-card .py{font-size:28px;line-height:1.35;letter-spacing:0;color:#BB8C4F;font-weight:700;margin-top:clamp(3px,.5vh,8px);}
 .char-card .spk{width:clamp(42px,6vh,60px);height:clamp(42px,6vh,60px);border-radius:50%;border:3px solid #FFE0B8;margin-top:clamp(6px,1vh,14px);background:#fff;color:#2D2A26;font-size:clamp(18px,3vh,26px);flex-shrink:0;transition:transform .12s,background .12s;}
@@ -146,9 +122,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .en-block-extra .rows{margin-top:0}
 .en-block-forms{font-size:15px;color:#6C6259}
 #detailYue .readout-row{font-size:clamp(26px,3.4vh,36px);}
-.note{font-size:15px;color:#9a8f7d;font-weight:600;margin-left:6px;}
 .word-card .wyue{font-size:clamp(15px,2vh,20px);color:#216C76;font-weight:700;line-height:1.15;letter-spacing:0;}
 .word-card{padding:8px 8px 10px;gap:6px}
+.word-card .readout-row{border:0;background:transparent;padding:0 4px;min-height:44px}
 .word-card .w{margin-bottom:2px}
 .word-card .rows{width:100%;gap:6px;flex:1;display:flex;flex-direction:column}
 .word-card .readout-row{flex:1;min-height:44px;padding:2px 10px;gap:8px;border-radius:10px;font-size:clamp(15px,2vh,20px)}
@@ -165,7 +141,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .rad-card .rad-badge{width:clamp(36px,5vh,64px);height:clamp(36px,5vh,64px);flex-shrink:0;border-radius:clamp(10px,1.5vh,16px);background:#FFEED6;border:3px solid #FFD8A8;display:flex;align-items:center;justify-content:center;font-size:clamp(24px,4vh,48px);font-weight:400;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;}
 .rad-card .rad-info{flex:1;min-width:0;}
 .rad-card .rad-title{font-size:clamp(13px,2vh,18px);font-weight:800;}
-.rad-card .rad-detail{font-size:clamp(11px,1.6vh,14px);color:#8E7550;margin-top:1px;line-height:1.4;}
+.rad-card .rad-detail{font-size:clamp(15px,2.4vh,21px);color:#8E7550;margin-top:1px;line-height:1.4;}
 .rad-card .rad-tip{margin-top:clamp(2px,.4vh,6px);font-size:clamp(11px,1.5vh,13px);color:#4A7CFF;background:#E8F0FF;border-radius:clamp(8px,1vh,12px);padding:clamp(4px,.6vh,8px) clamp(10px,1.5vw,14px);line-height:1.4;}
 .sec-label{font-size:clamp(14px,2.2vh,22px);font-weight:800;color:#8E7550;letter-spacing:1px;flex-shrink:0;margin:0;padding-top:clamp(2px,.3vh,6px);}
 /* 笔顺格子保持稳定尺寸，容器随实际换行自然增高。 */
@@ -179,7 +155,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .stroke-cell .writer-host svg{width:100%!important;height:100%!important;}
 .stroke-num{display:block;flex:0 0 16px;height:16px;line-height:16px;padding-right:2px;text-align:right;font-size:clamp(8px,1.2vh,12px);color:#C8BCA8;font-weight:700;}
 /* 组词区 */
-#words{display:flex;gap:clamp(6px,1vh,12px);flex-wrap:wrap;flex-shrink:0;margin:0;}
+#words{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:clamp(6px,1vh,12px);flex-shrink:0;margin:0;}
 .word-card{cursor:default;min-width:clamp(150px,19vw,210px);flex:1;background:#F6FFF8;border:3px solid #C8E6C9;border-radius:clamp(14px,2vh,20px);padding:clamp(6px,1vh,14px) clamp(6px,1vw,8px) clamp(6px,1vh,12px);display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vh,8px);box-shadow:0 4px 12px rgba(76,175,125,.08);cursor:pointer;transition:transform .12s,background .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .word-card:active,.word-card.pressed{transform:none;background:#F6FFF8;border-color:#C8E6C9;}
 .word-card.playing{background:#FFF4E0;border-color:#FF9D3C;box-shadow:0 4px 14px rgba(255,157,60,.25);}
@@ -205,7 +181,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   #results .r-title{font-size:clamp(14px,1.8vh,18px);margin-top:2px;margin-bottom:2px;}
   #results .r-sub{font-size:clamp(11px,1.4vh,14px);}
   #voiceEcho{margin-top:2px;padding:4px 10px;font-size:clamp(11px,1.5vh,13px);}
-  .char-card{min-width:clamp(100px,12vw,160px);max-width:clamp(130px,18vw,200px);padding:clamp(10px,1.6vh,20px) 12px clamp(10px,1.6vh,18px);border-width:2px;border-radius:clamp(10px,1.4vh,16px);}
+  .char-card{padding:clamp(10px,1.6vh,20px) 12px clamp(10px,1.6vh,18px);border-width:2px;border-radius:clamp(10px,1.4vh,16px);}
   .char-card .zi{font-size:clamp(64px,10vh,120px);} /* 实际由 fitResultCards 动态覆盖 */
   .char-card .spk{width:clamp(36px,5vh,50px);height:clamp(36px,5vh,50px);font-size:clamp(16px,2.4vh,22px);margin-top:clamp(4px,.6vh,10px);border-width:2px;}
   #resultChars{gap:clamp(8px,1.4vh,16px);}
@@ -222,21 +198,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   #detailBody .detail-learning .stroke-cell{border-radius:8px;border-color:#dde3e6;border-width:2px;box-shadow:none;}
   #detailBody .detail-learning .stroke-num{color:#647880;font-size:12px;padding-right:4px;}
   #detailBody .detail-learning .rad-card{background:transparent;border:0;border-top:1px solid #e5e7e8;border-radius:0;box-shadow:none;padding:12px 0 0;}
-  #detailBody .detail-learning .word-card{min-width:0;border-radius:8px;border-width:2px;box-shadow:none;padding:12px 8px;}
+  #detailBody .detail-learning #radSection + .sec-label{border-top:1px solid #e5e7e8;padding-top:12px;}
+  #detailBody .detail-learning .word-card{border-radius:8px;border-width:2px;box-shadow:none;padding:12px 8px;}
   #detailBody .detail-learning .word-card .w{letter-spacing:0;font-size:26px;}
 }
 @media (max-width:899px), (orientation:portrait){
   .detail-learning{display:contents;}
 }
-@media (max-width:899px), (orientation:portrait){
-  #mixedDetailHost > #detailBody{display:flex;grid-template-columns:none;gap:10px;}
-  #mixedDetailHost > #detailBody .detail-learning{display:contents;overflow:visible;}
-  #mixedDetailHost > #detailBody .detail-learning > #radSection,
-  #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label,
-  #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{grid-column:auto;grid-row:auto;}
-  #mixedDetailHost > #detailBody .detail-learning > #radSection{display:block;}
-  #mixedDetailHost > #detailBody .detail-learning > #radSection .rad-card{height:auto;min-height:0;}
-  #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{display:flex;}
 }
 @media (max-width:600px){
   #detailPinyin{font-size:40px;}
@@ -294,7 +262,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #home .language-mode{order:1;}
 #home #recBtn{order:2;}
 #home #historyBtn{order:4;}
-#home #warnBanner{order:5;}
+#home #asrSource{order:5;width:100%;margin:0;text-align:center;font-size:13px;line-height:18px;color:#8E7550;}
+#home #asrSource:empty{display:none;}
+#home #warnBanner{order:6;}
 #lookupWorkspace .page-head{min-height:56px;margin:8px 12px;padding:6px 10px;border-radius:8px;}
 #lookupWorkspace .page-head button{min-width:56px;min-height:56px;border-radius:8px;padding:8px 12px;}
 #lookupWorkspace .page-head .brand{font-size:20px;letter-spacing:0;}
@@ -310,12 +280,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 }
 @media (max-width:899px), (orientation:portrait){
   #app{flex-direction:column;}
-  #home{flex:0 0 auto;width:100%;display:grid;grid-template-columns:150px minmax(0,1fr);grid-template-rows:auto auto auto 1fr;align-items:center;column-gap:12px;row-gap:8px;padding:10px 12px;overflow:visible;}
+  #home{flex:0 0 auto;width:100%;display:grid;grid-template-columns:150px minmax(0,1fr);grid-template-rows:auto auto auto 1fr auto;align-items:center;column-gap:12px;row-gap:8px;padding:10px 12px;overflow:visible;}
   #home .home-brand{grid-column:2;grid-row:1;justify-self:start;}
   #home .language-mode{grid-column:2;grid-row:2;justify-self:start;}
   #home #recBtn{grid-column:1;grid-row:1 / span 4;width:150px;height:150px;justify-self:center;}
   #home #historyBtn{grid-column:2;grid-row:4;}
-  #home #warnBanner{grid-column:1 / -1;grid-row:5;}
+  #home #asrSource{grid-column:2;grid-row:5;text-align:left;}
+  #home #warnBanner{grid-column:1 / -1;grid-row:6;}
   #lookupWorkspace{flex:1;width:100%;}
   #lookupWorkspace > #results,#lookupWorkspace > #detail,#lookupWorkspace > #history,#lookupWorkspace > #englishLookupRoot{width:100%;}
   #lookupWorkspace #detailBody{overflow-y:auto;}
@@ -346,6 +317,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   <button id="recBtn" aria-label="按住说话查字"><span class="mic" data-lucide="mic"></span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-dots"><i></i><i></i><i></i></span><span class="rec-txt">松开 查字</span></span></button>
   <p id="micStatus" role="status" aria-live="polite" data-state="idle">正在检查麦克风…</p>
   <button id="historyBtn">📖 查过的内容 <span class="n" id="histCount"></span></button>
+  <p id="asrSource"></p>
   <div id="warnBanner">⚠️ 语音功能未就绪，请检查网络后重试。<button id="voiceRetry" type="button">重试</button></div>
 </div>
 
@@ -1033,6 +1005,7 @@ function cloudRecognize(samples, lang){
       try{ d = JSON.parse(x.responseText); }catch(e){ reject(new Error("识别服务返回格式错误，请稍后重试")); return; }
       if(!d || typeof d.text !== "string"){ reject(new Error("识别服务返回格式错误，请稍后重试")); return; }
       window.__asrProvider = typeof d.provider === "string" ? d.provider : "";
+      var srcEl = document.getElementById("asrSource"); if(srcEl) srcEl.textContent = window.__asrProvider ? "（" + window.__asrProvider + "识别）" : "";
       resolve(d.text);
     };
     x.onerror = function(){ reject(new Error("识别网络连接失败，请稍后重试")); };
@@ -1067,6 +1040,7 @@ function showResultsPage(chars, toneNum, fromHistory, preserveAll){
   resetMixedSentenceUI();
   resultsFromHistory = !!fromHistory;
   resultsView = {kind:"candidates", chars:Array.from(chars), toneNum:toneNum || 0, fromHistory:!!fromHistory, preserveAll:!!preserveAll};
+  $("rTitle").style.display = "none"; $("rSub").style.display = "none";
   showWorkspace("results");
   var _rc = $("resultChars"); if(_rc) _rc.style.display = "";
   prefetchTTSList(chars, 4);
@@ -1175,10 +1149,9 @@ function readoutTrio(text, yueClass, onMandarin){
   var zhRow = readoutRow("普通话", "zh", text, esc(text), "wzh", "用普通话读「" + text + "」");
   if(onMandarin) zhRow.addEventListener("click", onMandarin);
   group.appendChild(zhRow);
-  if(yueReadings(text)){
-    var rows = yueAlign(text), doubt = false;
-    var jp = rows.map(function(r){ if(r.state === "maybe") doubt = true; return r.jp || ""; }).join(" ");
-    group.appendChild(readoutRow("粤语", "yue", text, esc(jp) + (doubt ? '<span class="note">?</span>' : ""), yueClass || "yue", "用粤语读「" + text + "」"));
+  var jp = yueReadings(text);
+  if(jp){
+    group.appendChild(readoutRow("粤语", "yue", text, esc(jp), yueClass || "yue", "用粤语读「" + text + "」"));
   }
   var en = englishOf(text);
   if(en) group.appendChild(readoutRow("英文", "en", en, esc(en), "wen", "读英文「" + en + "」"));
@@ -1266,14 +1239,12 @@ function fitStrokeCells(box, n){
   var W = box.clientWidth;
   if(!W || n < 1) return;
   var gap = parseFloat(getComputedStyle(box).columnGap) || 6;
-  var target = 68, minCell = 64, maxCell = 96;
-  var cols = Math.max(1, Math.min(n, Math.floor((W + gap) / (target + gap))));
+  var minCell = 64, maxCell = 200, maxCols = 8;
+  var cols = Math.max(1, Math.min(maxCols, n, Math.floor((W + gap) / (minCell + gap))));
   var size = Math.floor((W - (cols - 1) * gap) / cols);
-  while(cols > 1 && size < minCell){
-    cols--;
-    size = Math.floor((W - (cols - 1) * gap) / cols);
-  }
-  size = Math.max(minCell, Math.min(maxCell, size));
+  // 满 8 列时不再压上限：压了就会让 flex 换行时挤进第 9 个，破掉"每行最多 8 个"
+  if(cols < maxCols) size = Math.min(size, maxCell);
+  size = Math.max(minCell, size);
   var cells = box.querySelectorAll(".stroke-cell");
   var footer = 16;
   for(var k=0;k<cells.length;k++){ cells[k].style.width = size+"px"; cells[k].style.height = (size + footer)+"px"; }
@@ -1795,7 +1766,6 @@ function resetMixedSentenceUI(){
   mixedEnglishDetailController = null;
   var echo = $("voiceEcho");
   if(!echo) return;
-  echo.classList.remove("mixed-echo");
   echo.innerHTML = '<b style="color:#FF7A00;">🗣</b> <span id="voiceEchoTxt"></span>';
   echo.style.display = "none";
   var title = $("rTitle"); if(title) title.style.display = "";
@@ -2025,23 +1995,6 @@ function showCombinedSentenceMode(text, fromHistory){
   resetMixedSentenceUI();
   resultsFromHistory = !!fromHistory;
   resultsView = {kind:"sentence", text:text, fromHistory:!!fromHistory};
-  var isMixedSentence = /[\u4e00-\u9fff]/.test(text) && /[A-Za-z]/.test(text);
-  if(!isMixedSentence){
-    $("rTitle").textContent = "📖 你说的是：";
-    $("rSub").textContent = "点中文字看笔顺，下面查看 English 的意思";
-    var oldEcho = $("voiceEcho");
-    oldEcho.classList.add("mixed-echo");
-    oldEcho.innerHTML = '<span class="mixed-echo-label">🗣 你说的是</span><span id="voiceEchoTxt"></span>';
-    oldEcho.style.display = "block";
-    renderMixedSentenceTokens(text);
-    var oldChars = $("resultChars"); oldChars.innerHTML = ""; oldChars.style.display = "none";
-    var oldPhrase = mixedEnglishPhrase(text);
-    if(oldPhrase) loadCombinedEnglishResult(oldPhrase, !!fromHistory);
-    showWorkspace("results");
-    return;
-  }
-  $("rTitle").textContent = "📖 你说的是：";
-  $("rSub").textContent = "";
   $("rTitle").style.display = "none";
   $("rSub").style.display = "none";
   var echo = $("voiceEcho"); echo.style.display = "none";
@@ -2178,52 +2131,7 @@ function sentenceReadoutEl(text){
   return group.children.length ? group : null;
 }
 function showSentenceMode(text){
-  if(/[A-Za-z]/.test(text)){
-    showCombinedSentenceMode(text);
-    return;
-  }
-  cancelSpeech();
-  resetMixedSentenceUI();
-  resultsFromHistory = false;
-  resultsView = {kind:"sentence", text:text, fromHistory:false};
-  $("rTitle").textContent = "📖 你说的是：";
-  var src = window.__asrProvider ? "（" + window.__asrProvider + "识别）" : "";
-  $("rSub").textContent = "点句子里的字，看笔顺和部首 " + src;
-  var echo = $("voiceEcho");
-  echo.style.display = "block";
-  var et = $("voiceEchoTxt");
-  if(et) et.textContent = text;
-  echo.querySelectorAll(".sentence-rows").forEach(function(node){ node.remove(); });
-  var echoRows = sentenceReadoutEl(text);
-  if(echoRows){ echoRows.classList.add("echo-sentence-rows"); echo.appendChild(document.createElement("br")); echo.appendChild(echoRows); }
-  // 整句逐字渲染进主区域（与字卡模式同款大卡片，fitResultCards 自动放大居中）
-  showWorkspace("results");
-  var box = $("resultChars"); box.style.display = ""; box.innerHTML = "";
-  for(var i=0;i<text.length;i++){
-    var ch = text[i];
-    if(!/[\u4e00-\u9fff]/.test(ch)) continue;
-    var card = document.createElement("div");
-    if(DICT[ch]){
-      var data = DICT[ch];
-      var py = Array.isArray(data.p) ? data.p[0] : data.p;
-      card.className = "char-card";
-      card.innerHTML = '<div class="zi">' + esc(ch) + '</div><div class="py">' + esc(py) + '</div><button class="spk" aria-label="读一读"></button>';
-      speakerIcon(card.querySelector(".spk"));
-      (function(z){
-        card.onclick = function(){ current = z; detailFrom = "results"; addHistory(z); renderDetail(0); };
-        card.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(z, this); };
-      })(ch);
-    } else {
-      card.className = "char-card sent-miss";
-      card.innerHTML = '<div class="zi">' + esc(ch) + '</div><div class="py">词库暂无</div>';
-      (function(z){
-        card.onclick = function(){ toast("「" + z + "」还没收进词库"); };
-      })(ch);
-    }
-    box.appendChild(card);
-  }
-  requestAnimationFrame(function(){ requestAnimationFrame(fitResultCards); });
-  prefetchTTSList((text.match(/[\u4e00-\u9fff]/g) || []).filter(function(c,i,a){ return a.indexOf(c)===i; }), 4);
+  showCombinedSentenceMode(text);
 }
 function showSelectMode(text){
   var seen = {}; var list = [];
@@ -2237,6 +2145,7 @@ function showSelectMode(text){
   list.sort(function(a,b){ return rankOf(a) - rankOf(b); });
   // 意图命中的第一个字（最可能是孩子想查的）标记出来
   var best = ranked.length ? ranked[0] : null;
+  $("rTitle").style.display = ""; $("rSub").style.display = "";
   $("rTitle").textContent = best ? ("📖 你说的是一句话——你想查的可能是「" + best + "」") : "📖 你说的是一句话，里面有几个字——点你要查的那个";
   $("rSub").textContent = "点你要查的那个字";
   showResultsPage(list, 0);
@@ -2292,8 +2201,6 @@ function showVoiceResults(chars, rawText, toneNum, forceWide){
   showResultsPage(list, toneNum);
   var echo = $("voiceEcho");
   if(rawText){ echo.style.display = "block"; $("voiceEchoTxt").textContent = rawText; }
-  $("rTitle").textContent = "📖 你读的是哪个字？";
-  $("rSub").textContent = toneNum ? "点一下就能看笔顺和部首（第"+toneNum+"声）" : "点一下就能看笔顺和部首";
 }
 updateHistoryUI();
 function suspendCapture(){
