@@ -9,6 +9,7 @@
 <script src="models/strokes/hanzi-writer.min.js"></script>
 <script src="models/dictionary/character-data.js"></script>
 <script src="models/dictionary/cantonese-data.js"></script>
+<script src="models/dictionary/english-data.js"></script>
 
 <style>*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;outline:none;}
 html,body{height:100%;overflow:hidden;}
@@ -71,44 +72,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .mixed-latin{display:inline-flex;align-items:center;min-height:clamp(50px,6.5vh,74px);padding:0 clamp(2px,.4vw,6px);color:#176476;font-weight:800;overflow-wrap:anywhere;word-break:break-word;}
 .mixed-space{width:clamp(4px,1vw,12px);}
 .combined-english-card{width:100%;min-width:0;padding:clamp(16px,2vh,26px) clamp(16px,2vw,28px);background:#fff;border:3px solid #CFE6D5;border-left:10px solid #56A96F;border-radius:clamp(16px,2vh,28px);box-shadow:0 5px 18px rgba(0,0,0,.05);}
-.combined-english-head{display:flex;align-items:center;gap:12px;min-height:48px;}
-.combined-english-label{margin-right:auto;color:#3B8B59;font-size:clamp(16px,2.2vh,22px);font-weight:800;}
-.combined-english-speak{min-width:56px;min-height:56px;padding:8px 14px;border:0;border-radius:16px;background:#176476;color:#fff;font-size:clamp(16px,2.2vh,20px);font-weight:800;cursor:pointer;touch-action:manipulation;}
-.combined-english-speak.playing{background:#0E4A59;}
-.combined-english-word{margin-top:clamp(14px,2vh,24px);font-size:clamp(38px,6vh,66px);line-height:1.08;font-weight:800;color:#176476;overflow-wrap:anywhere;word-break:break-word;}
-.combined-english-phonetic{margin-top:clamp(5px,.8vh,10px);font-size:clamp(20px,3vh,32px);line-height:1.25;color:#BB8C4F;overflow-wrap:anywhere;}
-.combined-english-divider{height:2px;margin:clamp(12px,2vh,20px) 0;background:#E9F0EA;}
-.combined-english-translation{font-size:clamp(24px,4vh,38px);line-height:1.35;font-weight:700;color:#2D2A26;overflow-wrap:anywhere;word-break:break-word;}
-.combined-english-hint{margin-top:clamp(6px,1vh,10px);font-size:clamp(13px,1.8vh,17px);color:#A28D74;}
 .combined-english-error{padding:12px 14px;border-radius:12px;background:#FFF0E6;border:2px solid #FFB66B;color:#8A4B00;font-size:clamp(15px,2vh,19px);}
-#combinedEnglishResult.mixed-inline-host{display:flex;flex:1;min-height:0;width:100%;max-width:1120px;}
+#combinedEnglishResult.mixed-inline-host{display:flex;flex:1;min-height:0;width:100%;}
 .mixed-inline-result{display:flex;flex:1;flex-direction:column;min-height:0;width:100%;padding:clamp(10px,1.5vh,18px) clamp(8px,1vw,16px) clamp(14px,2vh,24px);color:#2D2A26;}
 .mixed-token-row{display:flex;flex-shrink:0;align-items:center;justify-content:center;flex-wrap:wrap;gap:clamp(8px,.8vw,12px);padding:4px 0;}
-.mixed-token-row .mixed-inline-token{display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:56px;padding:6px 8px;border:0;border-bottom:2px solid #E6DCCF;border-radius:4px;background:transparent;color:#2D2A26;font:inherit;font-size:clamp(24px,3.5vh,44px);font-weight:800;line-height:1.1;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
-.mixed-token-row .mixed-inline-token:active,.mixed-token-row .mixed-inline-token.selected{border-bottom-color:#216C76;background:#E9F5F4;color:#216C76;}
+.mixed-token-row .mixed-inline-token{display:inline-flex;align-items:center;justify-content:center;min-width:48px;min-height:56px;padding:6px 8px;border:0;border-radius:10px;background:transparent;color:#2D2A26;font:inherit;font-size:clamp(24px,3.5vh,44px);font-weight:800;line-height:1.1;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.mixed-token-row .mixed-inline-token:active,.mixed-token-row .mixed-inline-token.selected{background:#E9F5F4;color:#216C76;}
 .mixed-token-row .mixed-inline-token:focus-visible{outline:2px solid #216C76;outline-offset:3px;}
-.mixed-token-row .mixed-token{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.mixed-token-row .mixed-token{display:inline-flex;align-items:center;border-radius:10px;transition:background .12s;}
+
+
 .mixed-token-row .yue{font-size:clamp(15px,1.9vh,20px);line-height:1.1;color:#216C76;font-weight:700;max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .mixed-token-row .yue.maybe::after{content:"?";color:#9a8f7e;font-weight:600;}
 .mixed-token-row .yue.blank{visibility:hidden;}
-.mixed-translation{flex-shrink:0;min-height:clamp(24px,3vh,36px);padding:0 4px;text-align:center;color:#927B6C;font-size:clamp(14px,1.8vh,18px);line-height:1.45;}
-.mixed-translation.loading{color:#B8A080;}
 .mixed-detail-divider{flex-shrink:0;height:1px;margin:clamp(12px,2vh,22px) 0 0;background:#E6DCCF;}
 .mixed-detail-host{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:clamp(12px,1.8vh,20px) 0 0;}
 .mixed-detail-host.mixed-chinese-active:not([hidden]){display:flex;overflow:hidden;background:transparent;}
 #mixedDetailHost > #detailBody{background:transparent;padding:4px 6px 6px;gap:clamp(18px,2vw,30px);grid-template-columns:minmax(340px,40%) minmax(0,1fr);}
 #mixedDetailHost > #detailBody .char-hero{padding:16px 20px 16px 0;}
-#mixedDetailHost > #detailBody .detail-learning{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto minmax(148px,1fr) auto;gap:clamp(10px,1.5vh,18px) clamp(14px,1.8vw,24px);padding:0 2px 4px 0;overflow:auto;align-content:stretch;}
+#mixedDetailHost > #detailBody .detail-learning{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto auto;gap:clamp(10px,1.5vh,18px) clamp(14px,1.8vw,24px);padding:0 2px 4px 0;overflow:auto;align-content:stretch;}
 #mixedDetailHost > #detailBody .detail-learning > .sec-label:first-child{grid-column:1 / -1;grid-row:1;}
 #mixedDetailHost > #detailBody .detail-learning > #strokes{grid-column:1 / -1;grid-row:2;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection{grid-column:1;grid-row:3 / span 2;min-width:0;display:flex;align-items:stretch;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection{grid-column:1 / -1;grid-row:3;min-width:0;display:flex;align-items:stretch;}
 #mixedDetailHost > #detailBody .detail-learning > #radSection .rad-card{width:100%;min-height:148px;height:100%;padding:16px 18px;align-items:flex-start;}
 #mixedDetailHost > #detailBody .detail-learning > #radSection .rad-badge{width:72px;height:72px;font-size:52px;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-title{font-size:clamp(20px,2.8vh,28px);line-height:1.3;}
 #mixedDetailHost > #detailBody .detail-learning > #radSection .rad-detail{font-size:clamp(15px,2.1vh,20px);line-height:1.5;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection .rad-tip{font-size:clamp(13px,1.8vh,17px);line-height:1.45;padding:8px 12px;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label{grid-column:2;grid-row:3;align-self:end;}
-#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{grid-column:2;grid-row:4;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-self:stretch;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label{grid-column:1 / -1;grid-row:4;align-self:end;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words{grid-column:1 / -1;grid-row:5;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-self:start;}
+#mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card{min-width:0;width:100%}
 #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card{min-width:0;min-height:clamp(86px,11vh,132px);padding:14px 8px;justify-content:center;}
 #mixedDetailHost > #detailBody .detail-learning > #radSection + .sec-label + #words .word-card .w{font-size:clamp(26px,4vh,38px);line-height:1.25;letter-spacing:0;white-space:nowrap;}
 #mixedDetailHost > #detailBody #words .readout-row{min-height:44px;border:0;border-radius:0;background:transparent;padding:0;gap:4px;justify-content:center;}
@@ -116,23 +107,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #mixedDetailHost > #detailBody #detailPinyin{font-size:clamp(58px,7vh,72px);}
 #mixedDetailHost > #detailBody #detailYue .readout-row{font-size:clamp(24px,3.2vh,32px);}
 .mixed-detail-host[hidden]{display:none;}
-.mixed-detail{width:100%;}
-.mixed-detail-speak{min-width:clamp(72px,9vw,112px);min-height:clamp(44px,5.5vh,58px);padding:8px 12px;border:0;border-radius:14px;background:#216C76;color:#fff;font-size:clamp(14px,1.9vh,18px);font-weight:800;cursor:pointer;touch-action:manipulation;}
-.mixed-yue-sentence{display:block;margin:2px auto 0;background:#2E7D6B;}
-.echo-yue-sentence{min-width:120px;min-height:38px;padding:5px 12px;font-size:14px;margin-top:6px;}
-.mixed-detail-label{margin-top:clamp(12px,1.6vh,18px);font-size:clamp(16px,2.2vh,22px);font-weight:700;color:#6C6259;}
-.mixed-detail-words{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
-.mixed-detail-word{min-height:56px;padding:8px 14px;border:0;border-bottom:2px solid #E6DCCF;border-radius:4px;background:transparent;color:#2D2A26;font-size:clamp(24px,3.4vh,30px);font-weight:700;cursor:pointer;touch-action:manipulation;}
-.mixed-detail-word.loading,.mixed-detail-speak.loading{outline:2px solid #528BBF;outline-offset:2px;}
-.mixed-detail-word.playing{background:#E9F5F4;border-bottom-color:#216C76;}
 .mixed-detail-loading,.mixed-detail-error{padding:10px 0;color:#927B6C;font-size:clamp(15px,2vh,19px);}
-.mixed-detail-en-word{font-size:clamp(34px,5vh,58px);font-weight:800;line-height:1.1;color:#216C76;overflow-wrap:anywhere;word-break:break-word;}
-.mixed-detail-en-head{display:flex;align-items:center;gap:12px;}
-.mixed-detail-en-head .mixed-detail-speak{margin-left:auto;}
-.mixed-detail-en-phonetic{margin-top:8px;font-size:clamp(28px,4vh,36px);line-height:1.25;color:#927B6C;overflow-wrap:anywhere;}
-.mixed-detail-en-meanings{display:flex;flex-wrap:wrap;gap:8px;margin-top:clamp(14px,2vh,22px);}
-.mixed-detail-en-meaning{color:#2D2A26;font-size:clamp(16px,2.2vh,22px);line-height:1.35;}
-.mixed-detail-en-forms{margin-top:clamp(14px,2vh,22px);font-size:clamp(15px,2vh,19px);line-height:1.5;color:#927B6C;}
 .char-card{min-width:clamp(120px,15vw,220px);flex:1;max-width:clamp(170px,27vw,280px);background:#fff;border:3px solid #FFE0B8;border-radius:clamp(14px,2vh,24px);padding:clamp(12px,2vh,24px) clamp(12px,1.8vw,18px) clamp(12px,2vh,22px);display:flex;flex-direction:column;align-items:center;box-shadow:0 6px 20px rgba(255,122,0,.12);transition:transform .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .char-card .zi{font-size:96px;line-height:1.5;flex-shrink:0;font-weight:400;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;}
 .char-card .py{font-size:28px;line-height:1.35;letter-spacing:0;color:#BB8C4F;font-weight:700;margin-top:clamp(3px,.5vh,8px);}
@@ -144,15 +119,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #detailBody{flex:1;min-height:0;display:flex;flex-direction:column;gap:clamp(2px,.4vh,8px);overflow-y:auto;overflow-x:hidden;padding:0 clamp(10px,1.6vw,16px) clamp(12px,1.6vh,16px);justify-content:flex-start;}
 .char-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;border-radius:clamp(14px,2vh,28px);border:3px solid #F0E0C8;padding:clamp(8px,1.2vh,14px) clamp(12px,2vw,16px);flex:0 0 auto;min-height:0;box-shadow:0 4px 16px rgba(0,0,0,.04);}
 #detailPinyin{font-size:56px;line-height:1.3;color:#BB8C4F;font-weight:700;letter-spacing:0;margin-bottom:clamp(1px,.3vh,6px);flex-shrink:0;}
-#detailYue{width:100%;display:flex;flex-direction:column;gap:6px;flex-shrink:0;margin-bottom:clamp(1px,.3vh,6px);}
-.readout-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:48px;padding:4px 12px;border:2px solid #9CC6BD;border-radius:14px;background:#F2FAF8;color:#216C76;font-weight:700;font-family:inherit;line-height:1.2;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+#detailYue{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;margin-bottom:clamp(1px,.3vh,6px);}
+.rows{display:inline-flex;flex-direction:column;gap:6px;max-width:100%;min-width:0}
+.readout-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:48px;white-space:nowrap;padding:4px 12px;border:2px solid #9CC6BD;border-radius:14px;background:#F2FAF8;color:#216C76;font-weight:700;font-family:inherit;line-height:1.2;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .readout-row:active{transform:scale(.97);background:#DFF1EC;}
-.readout-row.loading{outline:3px solid #528BBF;outline-offset:2px;}
-.readout-row .ro-spk{font-size:.8em;flex-shrink:0;}
+.readout-row.loading{outline:3px solid #528BBF;outline-offset:2px;background:#E7F1FC;}
+.readout-row.playing{border-color:#FF9D3C;background:#FFE9D2;color:#C65E00;}
+.readout-row .ro-label{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+.readout-row .ro-tag{font-size:13px;color:#7E9A98;font-weight:700;flex:0 0 46px;text-align:left}
+.readout-row svg{width:20px;height:20px;flex-shrink:0}
+.mixed-sentence-line{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;flex-shrink:0}
+.sentence-rows{margin:6px 0 0;flex-direction:row;justify-content:center;gap:8px;max-width:none;width:auto}
+.mixed-sentence-line .sentence-rows{margin:0;flex:0 0 auto}
+.lang-pill{justify-content:center;min-width:104px;padding:6px 14px}
+.lang-pill .ro-label{flex:0 1 auto;font-size:clamp(15px,2vh,19px)}
+.mixed-sentence-line .readout-row{min-height:48px}
+.en-block{width:100%;max-width:none;margin:0;padding:2px 0 6px}
+.en-block-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.en-block-word{font-size:clamp(34px,6vh,62px);font-weight:800;color:#216C76;line-height:1.1}
+.en-block .rows{margin-top:14px}
+.en-block-meanings{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+.en-block-meaning{display:flex;gap:10px;align-items:baseline;font-size:clamp(16px,2.1vh,20px);color:#4A443F}
+.en-block-pos{font-size:14px;color:#7A8B4F;font-weight:700;min-width:34px}
+.en-block-extra{margin-top:16px}
+.en-block-label{font-size:14px;color:#52636a;font-weight:700;margin-bottom:6px}
+.en-block-extra .rows{margin-top:0}
+.en-block-forms{font-size:15px;color:#6C6259}
 #detailYue .readout-row{font-size:clamp(26px,3.4vh,36px);}
 .note{font-size:15px;color:#9a8f7d;font-weight:600;margin-left:6px;}
 .word-card .wyue{font-size:clamp(15px,2vh,20px);color:#216C76;font-weight:700;line-height:1.15;letter-spacing:0;}
-.word-card .readout-row{min-height:44px;padding:2px 8px;gap:6px;border-radius:10px;}
+.word-card{padding:8px 8px 10px;gap:6px}
+.word-card .w{margin-bottom:2px}
+.word-card .rows{width:100%;gap:6px;flex:1;display:flex;flex-direction:column}
+.word-card .readout-row{flex:1;min-height:44px;padding:2px 10px;gap:8px;border-radius:10px;font-size:clamp(15px,2vh,20px)}
+.word-card .readout-row.long{font-size:12.5px}
+.word-card .readout-row.long .ro-tag{font-size:11px}
 #detailChar{font-size:280px;font-weight:400;line-height:1.5;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;max-width:100%;overflow:visible;white-space:nowrap;flex-shrink:0;}
 #detailChar.has-stroke-glyph{position:relative;display:block;width:1em;height:1.5em;}
 #detailChar .detail-glyph{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;}
@@ -179,12 +180,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .stroke-num{display:block;flex:0 0 16px;height:16px;line-height:16px;padding-right:2px;text-align:right;font-size:clamp(8px,1.2vh,12px);color:#C8BCA8;font-weight:700;}
 /* 组词区 */
 #words{display:flex;gap:clamp(6px,1vh,12px);flex-wrap:wrap;flex-shrink:0;margin:0;}
-.word-card{min-width:clamp(80px,16vw,140px);flex:1;background:#F6FFF8;border:3px solid #C8E6C9;border-radius:clamp(14px,2vh,20px);padding:clamp(6px,1vh,14px) clamp(6px,1vw,8px) clamp(6px,1vh,12px);display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vh,8px);box-shadow:0 4px 12px rgba(76,175,125,.08);cursor:pointer;transition:transform .12s,background .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
-.word-card:active,.word-card.pressed{transform:scale(.92);background:#E3F5E8;border-color:#8FCE9E;}
+.word-card{cursor:default;min-width:clamp(150px,19vw,210px);flex:1;background:#F6FFF8;border:3px solid #C8E6C9;border-radius:clamp(14px,2vh,20px);padding:clamp(6px,1vh,14px) clamp(6px,1vw,8px) clamp(6px,1vh,12px);display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.6vh,8px);box-shadow:0 4px 12px rgba(76,175,125,.08);cursor:pointer;transition:transform .12s,background .12s,border-color .12s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.word-card:active,.word-card.pressed{transform:none;background:#F6FFF8;border-color:#C8E6C9;}
 .word-card.playing{background:#FFF4E0;border-color:#FF9D3C;box-shadow:0 4px 14px rgba(255,157,60,.25);}
 .word-card .w{font-size:clamp(18px,3vh,30px);font-weight:700;letter-spacing:2px;}
 .word-card .w u{text-decoration:none;color:#FF7A00;}
-.word-card .mini-spk{display:none;}
+.word-card .mini-spk svg{width:20px;height:20px}
+.spk svg{width:1em;height:1em}
+.mini-spk{display:none;}
 /* 历史页 */
 .page-head{display:flex;align-items:center;justify-content:space-between;padding:clamp(6px,.8vh,12px) clamp(10px,2vw,16px);min-height:clamp(44px,6vh,60px);flex-shrink:0;margin:clamp(4px,.6vh,8px) clamp(6px,1.2vw,12px);background:#FFFAF5;border-radius:clamp(14px,2vh,24px);box-shadow:0 2px 8px rgba(0,0,0,.04);}
 .page-head button{font-size:clamp(16px,2.2vh,20px);border:0;border-radius:18px;padding:clamp(8px,1.5vh,12px) clamp(14px,2vw,22px);font-weight:700;background:#FFEED6;color:#2D2A26;min-height:clamp(40px,5vh,52px);}
@@ -1090,7 +1093,8 @@ function showResultsPage(chars, toneNum, fromHistory, preserveAll){
       if(!hint && typeof data.w[0] === "string") hint = data.w[0];
     }
     var card = document.createElement("div"); card.className = "char-card";
-    card.innerHTML = '<div class="zi">'+esc(ch)+'</div><div class="py">'+esc(py)+'</div>'+(hint ? '<div class="hint-word">'+esc(hint)+'</div>' : '')+'<button class="spk" aria-label="读一读">🔊</button>';
+    card.innerHTML = '<div class="zi">'+esc(ch)+'</div><div class="py">'+esc(py)+'</div>'+(hint ? '<div class="hint-word">'+esc(hint)+'</div>' : '')+'<button class="spk" aria-label="读一读"></button>';
+    speakerIcon(card.querySelector(".spk"));
     card.onclick = function(){ current = ch; detailFrom = resultsFromHistory ? "history" : "results"; addHistory(ch); renderDetail(toneNum); };
     card.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(ch, this); };
     box.appendChild(card);
@@ -1147,19 +1151,38 @@ function yueAlign(text){
   }
   return out;
 }
-function yueLabel(row){
-  if(!row || !row.jp) return "";
-  if(row.state === "maybe") return esc(row.jp) + '<span class="note">?</span>';
-  return esc(row.jp);
-}
 // 读法条：一行一种读法，整行可点，行尾图标表示"点这里能听"
-function readoutRow(lang, text, labelHtml, labelClass, ariaText){
+function speakerIcon(btn){ if(btn && window.LucideIcons){ btn.textContent = ""; btn.appendChild(window.LucideIcons.icon("volume-2")); } }
+function readoutRow(tag, lang, text, labelHtml, labelClass, ariaText){
   var row = document.createElement("button");
   row.type = "button"; row.className = "readout-row"; row.setAttribute("data-lang", lang);
-  row.innerHTML = '<span class="' + labelClass + '">' + labelHtml + '</span><span class="ro-spk" aria-hidden="true">🔊</span>';
+  if(String(text).length > 12) row.classList.add("long");
+  row.innerHTML = '<span class="ro-label"><span class="ro-tag">' + esc(tag) + '</span><span class="' + labelClass + '">' + labelHtml + '</span></span>';
+  row.appendChild(window.LucideIcons.icon("volume-2"));
   row.setAttribute("aria-label", ariaText);
   row.addEventListener("click", function(event){ event.stopPropagation(); speak(text, row, lang); });
+  if(lang !== "yue") prefetchTTS(text, lang).catch(function(){});
   return row;
+}
+function englishOf(text){
+  var d = (typeof ENGLISH_DATA !== "undefined" && ENGLISH_DATA) ? ENGLISH_DATA : null;
+  if(!d) return "";
+  return (d.word && d.word[text]) || (d.char && d.char[text]) || "";
+}
+// 读法条：同一个词的 普通话 / 粤语 / 英文 三行，缺数据的那行不出现，组内等宽
+function readoutTrio(text, yueClass, onMandarin){
+  var group = document.createElement("div"); group.className = "rows";
+  var zhRow = readoutRow("普通话", "zh", text, esc(text), "wzh", "用普通话读「" + text + "」");
+  if(onMandarin) zhRow.addEventListener("click", onMandarin);
+  group.appendChild(zhRow);
+  if(yueReadings(text)){
+    var rows = yueAlign(text), doubt = false;
+    var jp = rows.map(function(r){ if(r.state === "maybe") doubt = true; return r.jp || ""; }).join(" ");
+    group.appendChild(readoutRow("粤语", "yue", text, esc(jp) + (doubt ? '<span class="note">?</span>' : ""), yueClass || "yue", "用粤语读「" + text + "」"));
+  }
+  var en = englishOf(text);
+  if(en) group.appendChild(readoutRow("英文", "en", en, esc(en), "wen", "读英文「" + en + "」"));
+  return group;
 }
 function renderDetail(toneNum){
   restoreMixedChineseDetail();
@@ -1179,9 +1202,8 @@ function renderDetail(toneNum){
   $("detailPinyin").textContent = pys[0];
   var yueEl = $("detailYue");
   if(yueEl){
-    var yueRow = yueAlign(current)[0];
     yueEl.innerHTML = "";
-    if(yueRow && yueRow.jp && yueReadings(current)) yueEl.appendChild(readoutRow("yue", current, yueLabel(yueRow), "yue", "用粤语读「" + current + "」"));
+    yueEl.appendChild(readoutTrio(current, "yue"));
   }
   fitDetailChar();
   $("detailChar").onclick = function(){ speak(current, this); };
@@ -1208,12 +1230,10 @@ function fitDetailChar(){
 function renderRadical(ch){
   var box = $("radSection"); box.innerHTML = "";
   var r = RADICALS[ch]; if(!r) return;
-  var radicalChar = r.r; var radStrokes = r.s; var totalStrokes = r.ts;
-  var otherStrokes = totalStrokes - radStrokes;
+  var radStrokes = r.s, totalStrokes = r.ts, otherStrokes = totalStrokes - radStrokes;
   var card = document.createElement("div"); card.className = "rad-card";
-  var label = r.kind === "kangxi" ? "康熙部首" : "部首";
-  var tip = r.kind !== "kangxi" && radStrokes > 0 && otherStrokes >= 0 ? '<div class="rad-tip">📖 查字典：按 <b>'+radStrokes+'</b> 画找到 <b>'+esc(radicalChar)+'</b> 部，再按部首外 <b>'+otherStrokes+'</b> 画找到这个字。</div>' : '';
-  card.innerHTML = '<div class="rad-badge">'+esc(radicalChar)+'</div><div class="rad-info"><div class="rad-title">'+label+'：<b style="color:#FF7A00;">'+esc(radicalChar)+'</b></div><div class="rad-detail">部首 <b>'+radStrokes+'</b> 画 · 全字 <b>'+totalStrokes+'</b> 画</div>'+(otherStrokes >= 0 ? '<div class="rad-detail">除部首外还剩 <b>'+otherStrokes+'</b> 画</div>' : '')+tip+'</div>';
+  card.innerHTML = '<div class="rad-badge">' + esc(r.r) + '</div><div class="rad-info"><div class="rad-detail">部首 <b>' + radStrokes + '</b> 画 · 全字 <b>' + totalStrokes + '</b> 画</div>'
+    + (otherStrokes >= 0 ? '<div class="rad-detail">除部首外还剩 <b>' + otherStrokes + '</b> 画</div>' : '') + '</div>';
   box.appendChild(card);
 }
 var cleanups = []; var strokeDataCache = {}; var strokeDataLoading = {}; var strokeRenderSeq = 0;
@@ -1297,14 +1317,8 @@ function renderWords(data){
   words.slice(0,3).forEach(function(word){
     var card = document.createElement("div"); card.className = "word-card";
     var hi = word.split("").map(function(c){ return c===current ? "<u>"+esc(c)+"</u>" : esc(c); }).join("");
-    var yueRows = yueAlign(word);
     card.innerHTML = '<div class="w">'+hi+'</div>';
-    if(yueReadings(word)){
-      var yueText = yueRows.map(function(row){ return row.jp; }).join(" ");
-      var yueDoubt = yueRows.some(function(row){ return row.state === "maybe"; });
-      card.appendChild(readoutRow("yue", word, esc(yueText) + (yueDoubt ? '<span class="note">?</span>' : ""), "wyue", "用粤语读「" + word + "」"));
-    }
-    card.onclick = function(){ addHistory(current, word); speak(word, card); };
+    card.appendChild(readoutTrio(word, "wyue", function(){ addHistory(current, word); }));
     box.appendChild(card);
   });
   requestAnimationFrame(function(){ requestAnimationFrame(fitResultCards); });
@@ -1387,20 +1401,20 @@ function renderHistory(){
       var phonetic = item.kind === "word" && typeof item.phonetic === "string" ? item.phonetic : "";
       var summary = item.kind === "word" && Array.isArray(item.meanings) && item.meanings[0] && typeof item.meanings[0].translation === "string" ? item.meanings[0].translation : (item.translation || "");
       row.classList.add("english-history");
-      row.innerHTML = '<div class="english-history-main"><div class="english-history-word">'+esc(item.kind === "word" ? (item.word || item.query) : item.query)+'</div>'+(phonetic ? '<div class="english-history-phonetic">'+esc(phonetic)+'</div>' : '')+(summary ? '<div class="english-history-summary">'+esc(summary)+'</div>' : '')+'<span class="english-history-date">'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="朗读 '+esc(speech)+'">🔊</button>';
+      row.innerHTML = '<div class="english-history-main"><div class="english-history-word">'+esc(item.kind === "word" ? (item.word || item.query) : item.query)+'</div>'+(phonetic ? '<div class="english-history-phonetic">'+esc(phonetic)+'</div>' : '')+(summary ? '<div class="english-history-summary">'+esc(summary)+'</div>' : '')+'<span class="english-history-date">'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="朗读 '+esc(speech)+'"></button>';
       row.onclick = function(){ historyScrollTop = box.scrollTop; openEnglishHistory(item); };
       decorateHistorySpeaker(row.querySelector("button"));
       row.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(speech, this, "en"); };
     }else if(typeof item.w === "string" && item.w){
       row.classList.add("history-word-item");
-      row.innerHTML = '<div class="info"><div class="history-word">'+esc(item.w)+'</div><span>'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="读一读">🔊</button>';
+      row.innerHTML = '<div class="info"><div class="history-word">'+esc(item.w)+'</div><span>'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="读一读"></button>';
       row.onclick = function(){ historyScrollTop = box.scrollTop; openChineseWordHistory(item); };
       decorateHistorySpeaker(row.querySelector("button"));
       row.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(item.w, this); };
     }else{
       var data = DICT[item.c]; var py = data ? (Array.isArray(data.p) ? data.p[0] : data.p) : "";
       var words = data && data.w ? data.w.slice(0,2).join("、") : "";
-      row.innerHTML = '<div class="zi">'+esc(item.c)+'</div><div class="info"><b>'+esc(py+' · '+words)+'</b><span>'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="读一读">🔊</button>';
+      row.innerHTML = '<div class="zi">'+esc(item.c)+'</div><div class="info"><b>'+esc(py+' · '+words)+'</b><span>'+esc(formatHistoryDate(item.t))+'</span></div><button class="mini-spk" aria-label="读一读"></button>';
       row.onclick = function(){ historyScrollTop = box.scrollTop; current = item.c; detailFrom = "history"; renderDetail(); };
       decorateHistorySpeaker(row.querySelector("button"));
       row.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(item.c, this); };
@@ -1815,12 +1829,7 @@ function renderMixedSentenceTokens(text, tokenTarget){
       }
       if(inline){
         var holder = document.createElement("span"); holder.className = "mixed-token";
-        var row = aligned[i] || null;
-        var tag = document.createElement("span");
-        tag.className = "yue" + (row && row.jp ? "" : " blank") + (row && row.state === "maybe" ? " maybe" : "");
-        tag.textContent = row && row.jp ? row.jp : "·";
-        if(row && row.all && row.all.length) tag.title = "这个字有 " + row.all.length + " 个读法：" + row.all.join(" / ");
-        holder.appendChild(button); holder.appendChild(tag); target.appendChild(holder);
+        holder.appendChild(button); target.appendChild(holder);
       }else{
         target.appendChild(button);
       }
@@ -1911,21 +1920,54 @@ function renderMixedEnglishDetailForWord(word, trigger){
       host.innerHTML = '<div class="mixed-detail-error">这个英文词的读音暂时没查到</div>';
     });
 }
+function yueLabelOf(text){
+  return yueAlign(text).map(function(row){ return row.jp || ""; }).join(" ");
+}
+// 英文结果只有一种版面：原文 + 音标 + 读法条 + 释义 + 句中词组 / 相关词形
+function englishBlockEl(result, query, contextPhrase){
+  var isWord = !!(result && result.kind === "word");
+  var spoken = isWord && result.word ? result.word : query;
+  var block = document.createElement("div"); block.className = "en-block";
+  var head = document.createElement("div"); head.className = "en-block-head";
+  head.innerHTML = '<span class="en-block-word">' + esc(spoken) + '</span>';
+
+  block.appendChild(head);
+  var rows = document.createElement("div"); rows.className = "rows";
+  rows.appendChild(readoutRow("英文", "en", spoken, esc(spoken), "wen", "读英文「" + spoken + "」"));
+  block.appendChild(rows);
+  if(isWord){
+    var meanings = Array.isArray(result.meanings) ? result.meanings.filter(function(item){ return item && item.translation; }) : [];
+    if(meanings.length){
+      var list = document.createElement("div"); list.className = "en-block-meanings";
+      meanings.slice(0, 3).forEach(function(item){
+        var line = document.createElement("div"); line.className = "en-block-meaning";
+        line.innerHTML = (item.partOfSpeech ? '<span class="en-block-pos">' + esc(item.partOfSpeech) + '</span>' : "") + "<span>" + esc(item.translation) + "</span>";
+        list.appendChild(line);
+      });
+      block.appendChild(list);
+    }
+    var forms = Array.isArray(result.forms) ? result.forms.filter(function(item){ return item; }) : [];
+    if(contextPhrase || forms.length){
+      var extra = document.createElement("div"); extra.className = "en-block-extra";
+      if(contextPhrase){
+        var pl = document.createElement("div"); pl.className = "en-block-label"; pl.textContent = "句中词组"; extra.appendChild(pl);
+        var phraseRows = document.createElement("div"); phraseRows.className = "rows";
+        phraseRows.appendChild(readoutRow("英文", "en", contextPhrase, esc(contextPhrase), "wen", "读英文「" + contextPhrase + "」"));
+        extra.appendChild(phraseRows);
+      }
+      if(forms.length){
+        var fl = document.createElement("div"); fl.className = "en-block-label"; fl.textContent = "相关词形"; fl.style.marginTop = "12px"; extra.appendChild(fl);
+        var fv = document.createElement("div"); fv.className = "en-block-forms"; fv.textContent = forms.slice(0, 5).join("、"); extra.appendChild(fv);
+      }
+      block.appendChild(extra);
+    }
+  }
+  return block;
+}
 function renderMixedEnglishDetail(result, query, contextPhrase){
   var host = mixedDetailHost(); if(!host) return;
-  var spoken = result && result.kind === "word" && result.word ? result.word : query;
-  var phonetic = result && typeof result.phonetic === "string" ? result.phonetic : "";
-  var meanings = result && Array.isArray(result.meanings) ? result.meanings.filter(function(item){ return item && typeof item.translation === "string" && item.translation; }) : [];
-  var forms = result && Array.isArray(result.forms) ? result.forms.filter(function(item){ return typeof item === "string" && item; }) : [];
-  var meaningsHtml = meanings.length ? meanings.slice(0, 3).map(function(item){ return '<span class="mixed-detail-en-meaning">'+esc(item.translation)+'</span>'; }).join("") : '<span class="mixed-detail-loading">暂无中文释义</span>';
-  var formsHtml = forms.length ? '<div class="mixed-detail-en-forms">相关词形：'+forms.slice(0, 5).map(esc).join("、")+'</div>' : "";
-  var phraseHtml = contextPhrase ? '<div class="mixed-detail-label">句中词组</div><div class="mixed-detail-words"><button type="button" class="mixed-detail-word">'+esc(contextPhrase)+'</button></div>' : "";
-  host.hidden = false;
-  host.innerHTML = '<div class="mixed-detail mixed-detail-en"><div class="mixed-detail-en-head"><div class="mixed-detail-en-word">'+esc(spoken)+'</div><button type="button" class="mixed-detail-speak" aria-label="朗读 '+esc(spoken)+'">🔊 朗读</button></div>'
-    + '<div class="mixed-detail-en-phonetic">'+esc(phonetic || "暂无音标")+'</div><div class="mixed-detail-en-meanings">'+meaningsHtml+'</div>'+phraseHtml+formsHtml+'</div>';
-  host.querySelector(".mixed-detail-speak").addEventListener("click", function(){ speak(spoken, this, "en"); });
-  var phraseButton = host.querySelector(".mixed-detail-word");
-  if(phraseButton) phraseButton.addEventListener("click", function(){ speak(contextPhrase, this, "en"); });
+  host.hidden = false; host.textContent = "";
+  host.appendChild(englishBlockEl(result, query, contextPhrase));
 }
 function saveCombinedEnglishRecord(result, query){
   if(!result || (result.kind !== "word" && result.kind !== "sentence") || typeof query !== "string" || !query.trim()) return;
@@ -1942,37 +1984,9 @@ function saveCombinedEnglishRecord(result, query){
 }
 function renderCombinedEnglishResult(result, query){
   var box = $("combinedEnglishResult"); if(!box) return;
-  if(box.classList.contains("mixed-inline-host")){
-    var translation = result && result.kind === "word" && Array.isArray(result.meanings) && result.meanings[0]
-      ? result.meanings[0].translation
-      : (result && typeof result.translation === "string" ? result.translation : "");
-    var translationNode = $("mixedTranslation");
-    if(translationNode){
-      translationNode.classList.remove("loading");
-      translationNode.textContent = translation || "暂时没有中文翻译";
-    }
-    return;
-  }
+  if(box.classList.contains("mixed-inline-host")) return;
   box.textContent = "";
-  var card = document.createElement("div"); card.className = "combined-english-card";
-  var head = document.createElement("div"); head.className = "combined-english-head";
-  var label = document.createElement("span"); label.className = "combined-english-label"; label.textContent = result && result.kind === "word" ? "English 单词" : "English 学习结果";
-  var speakButton = document.createElement("button"); speakButton.type = "button"; speakButton.className = "combined-english-speak"; speakButton.textContent = "🔊 朗读";
-  var spoken = result && result.kind === "word" && result.word ? result.word : query;
-  speakButton.setAttribute("aria-label", "朗读 " + spoken);
-  speakButton.addEventListener("click", function(){ speak(spoken, speakButton, "en"); });
-  head.appendChild(label); head.appendChild(speakButton); card.appendChild(head);
-  var word = document.createElement("div"); word.className = "combined-english-word"; word.textContent = spoken; card.appendChild(word);
-  if(result && result.kind === "word" && typeof result.phonetic === "string" && result.phonetic){
-    var phonetic = document.createElement("div"); phonetic.className = "combined-english-phonetic"; phonetic.textContent = result.phonetic; card.appendChild(phonetic);
-  }
-  var divider = document.createElement("div"); divider.className = "combined-english-divider"; card.appendChild(divider);
-  var translation = document.createElement("div"); translation.className = "combined-english-translation";
-  if(result && result.kind === "word" && Array.isArray(result.meanings) && result.meanings[0]) translation.textContent = result.meanings[0].translation || "";
-  else translation.textContent = result && typeof result.translation === "string" ? result.translation : "";
-  card.appendChild(translation);
-  var hint = document.createElement("div"); hint.className = "combined-english-hint"; hint.textContent = "英文结果保留在同一页，不用切换语言"; card.appendChild(hint);
-  box.appendChild(card);
+  box.appendChild(englishBlockEl(result, query, ""));
 }
 function loadCombinedEnglishResult(query, fromHistory){
   if(!query) return;
@@ -1982,8 +1996,6 @@ function loadCombinedEnglishResult(query, fromHistory){
     combinedEnglishSeq++;
     if(combinedEnglishController) combinedEnglishController.abort();
     combinedEnglishController = null;
-    var mixedTranslation = $("mixedTranslation");
-    if(mixedTranslation){ mixedTranslation.classList.add("loading"); mixedTranslation.textContent = "正在查中文意思…"; }
   }else{
     clearCombinedEnglishResult();
     box.hidden = false; box.classList.add("show");
@@ -2002,10 +2014,7 @@ function loadCombinedEnglishResult(query, fromHistory){
     .catch(function(error){
       if(seq !== combinedEnglishSeq || error.name === "AbortError") return;
       combinedEnglishController = null;
-      if(mixedInline){
-        var failedTranslation = $("mixedTranslation");
-        if(failedTranslation){ failedTranslation.classList.remove("loading"); failedTranslation.textContent = "中文意思暂时没查到"; }
-      }else{
+      if(!mixedInline){
         box.textContent = "";
         var errorNode = document.createElement("div"); errorNode.className = "combined-english-error"; errorNode.textContent = "英文解释暂时没出来，原句仍然保留。"; box.appendChild(errorNode);
       }
@@ -2039,11 +2048,11 @@ function showCombinedSentenceMode(text, fromHistory){
   var chars = $("resultChars"); chars.innerHTML = ""; chars.style.display = "none";
   var box = $("combinedEnglishResult");
   box.hidden = false; box.classList.add("show", "mixed-inline-host");
-  box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-token-row" id="mixedTokenRow"></div><div class="mixed-translation loading" id="mixedTranslation" aria-live="polite">正在查中文意思…</div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
+  box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-sentence-line"><div class="mixed-token-row" id="mixedTokenRow"></div></div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
   showWorkspace("results");
   renderMixedSentenceTokens(text, $("mixedTokenRow"));
-  var yueSentenceBtn = yueSentenceButtonEl(text);
-  if(yueSentenceBtn) $("mixedTokenRow").insertAdjacentElement("afterend", yueSentenceBtn);
+  var sentenceRows = sentenceReadoutEl(text);
+  if(sentenceRows) $("mixedTokenRow").parentNode.appendChild(sentenceRows);
   var phrase = mixedEnglishPhrase(text);
   if(phrase) loadCombinedEnglishResult(phrase, !!fromHistory);
 }
@@ -2152,15 +2161,21 @@ function shouldUseSelectMode(text){
 }
 // 选字模式：列出句中所有汉字（去停用词去重），让小孩点选要查的字
 // 语音整句模式：识别结果原样输出（保留重复与顺序），渲染成主区域大卡片，点任意字查详情
-function yueSentenceButtonEl(text, extraClass){
-  var sentence = yueSentenceText(text);
-  if(!sentence || !yueReadings(sentence)) return null;
-  var btn = document.createElement("button");
-  btn.type = "button"; btn.className = "mixed-detail-speak " + (extraClass || "mixed-yue-sentence");
-  btn.textContent = "🔊 粤语整句";
-  btn.setAttribute("aria-label", "用粤语朗读这句");
-  btn.addEventListener("click", function(){ speak(sentence, btn, "yue"); });
-  return btn;
+function langPill(tag, text, lang){
+  var row = readoutRow(tag, lang, text, "", "w" + lang, tag + "读整句");
+  row.classList.add("lang-pill");
+  return row;
+}
+function sentenceReadoutEl(text){
+  var group = document.createElement("div"); group.className = "rows sentence-rows";
+  var latin = String(text || "").replace(/[^\x00-\x7F]/g, " ").replace(/\s+/g, " ").trim();
+  var chinese = yueSentenceText(text);
+  if(latin) group.appendChild(langPill("英文", latin, "en"));
+  if(chinese){
+    group.appendChild(langPill("普通话", chinese, "zh"));
+    if(yueReadings(chinese)) group.appendChild(langPill("粤语", chinese, "yue"));
+  }
+  return group.children.length ? group : null;
 }
 function showSentenceMode(text){
   if(/[A-Za-z]/.test(text)){
@@ -2178,9 +2193,9 @@ function showSentenceMode(text){
   echo.style.display = "block";
   var et = $("voiceEchoTxt");
   if(et) et.textContent = text;
-  var echoBtn = yueSentenceButtonEl(text, "mixed-yue-sentence echo-yue-sentence");
-  echo.querySelectorAll(".echo-yue-sentence").forEach(function(node){ node.remove(); });
-  if(echoBtn){ echo.appendChild(document.createElement("br")); echo.appendChild(echoBtn); }
+  echo.querySelectorAll(".sentence-rows").forEach(function(node){ node.remove(); });
+  var echoRows = sentenceReadoutEl(text);
+  if(echoRows){ echoRows.classList.add("echo-sentence-rows"); echo.appendChild(document.createElement("br")); echo.appendChild(echoRows); }
   // 整句逐字渲染进主区域（与字卡模式同款大卡片，fitResultCards 自动放大居中）
   showWorkspace("results");
   var box = $("resultChars"); box.style.display = ""; box.innerHTML = "";
@@ -2192,7 +2207,8 @@ function showSentenceMode(text){
       var data = DICT[ch];
       var py = Array.isArray(data.p) ? data.p[0] : data.p;
       card.className = "char-card";
-      card.innerHTML = '<div class="zi">' + esc(ch) + '</div><div class="py">' + esc(py) + '</div><button class="spk" aria-label="读一读">🔊</button>';
+      card.innerHTML = '<div class="zi">' + esc(ch) + '</div><div class="py">' + esc(py) + '</div><button class="spk" aria-label="读一读"></button>';
+      speakerIcon(card.querySelector(".spk"));
       (function(z){
         card.onclick = function(){ current = z; detailFrom = "results"; addHistory(z); renderDetail(0); };
         card.querySelector("button").onclick = function(ev){ ev.stopPropagation(); speak(z, this); };
