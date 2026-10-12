@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh"><meta charset="utf-8">
+<title>发音调试台</title>
+<style>
+:root{--line:#e5ded2;--ink:#2b2620;--sub:#6b6357;--ok:#1c7a4d;--bad:#b43335;--bg:#faf8f4}
+*{box-sizing:border-box}
+body{font:15px/1.6 -apple-system,"PingFang SC",sans-serif;margin:0 auto;padding:18px;max-width:900px;background:var(--bg);color:var(--ink)}
+h1{font-size:19px;margin:0 0 2px}.lead{color:var(--sub);font-size:13px;margin:0 0 14px}
+input,button,select{font:inherit;color:inherit}
+#text{width:100%;font-size:26px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;letter-spacing:.06em}
+.chip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:5px 7px;margin:0 6px 6px 0}
+.chip input{width:74px;border:0;border-bottom:1px solid var(--line);padding:2px 0;background:transparent}
+.chip .cand{font-size:12px;color:var(--sub)}
+.chip .cand b{cursor:pointer;color:var(--ink);font-weight:400;border-bottom:1px dotted var(--sub)}
+.row{display:grid;grid-template-columns:190px 1fr;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 11px;margin-bottom:8px}
+.row .meta{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--sub);word-break:break-all}
+.bad{color:var(--bad)}.ok{color:var(--ok)}
+audio{height:32px;width:100%;max-width:330px}
+button{border:1px solid #cbbfa9;background:#fff;border-radius:9px;padding:7px 14px;cursor:pointer}
+button.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+pre{background:#fff;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--sub)}
+details{margin-top:10px}
+.hint{font-size:12px;color:var(--sub)}
+</style>
+<h1>发音调试台</h1>
+<p class="lead">输入字或词 → 逐字读法可改 → 同一条分别喂给现网 Azure 和 Google 两种音色，听差别、看上游返回码。
+音频走的是生产同一套 SSML 构造与响度归一，所以这里听到的等于线上会听到的。</p>
+
+<input id="text" placeholder="银行" autocomplete="off">
+<div class="bar">
+  <button id="all" class="pri">三家并排合成</button>
+  <button id="load">重新按表填读法</button>
+  <label class="hint">读法来源：<span id="src">—</span></label>
+</div>
+<div id="chips"></div>
+<div id="out"></div>
+<details><summary class="hint">送出去的 SSML 与缓存键</summary><pre id="ssml">—</pre></details>
+<p class="hint">两家行为不同：Azure 对发不出来的粤拼直接回 400；Google 一律回 200 并<b>静默按默认读法发</b>（已实测：非法的 hyn3 与合法的 ngan4 音频逐字节相同）。所以换 Google 的前提是把合法性判断搬到我们这边 —— 页面下方那行红字就是这道闸门的原型。</p>
+<script>
+var $=function(s){return document.querySelector(s)};
+var loaded="";
+var ENGINES=[];
+function esc(s){return (s||"").replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]});}
+function readings(){return [...document.querySelectorAll("#chips input")].map(function(i){return i.value.trim()}).join(" ");}
+function renderChips(data){
+  $("#src").textContent = (data.source||"—") + (data.word ? ("：" + data.word) : "") + (data.unverified ? "（这个词在 unverified）" : "");
+  $("#chips").innerHTML = data.chars.map(function(c,i){
+    var cands=(c.all||[]).filter(function(x){return x});
+    return '<span class="chip"><b style="font-size:19px">'+esc(c.char)+'</b>'+
+      '<input data-i="'+i+'" value="'+esc(c.pick)+'">'+
+      '<span class="cand">'+cands.map(function(x){return '<b data-set="'+i+'" data-v="'+esc(x)+'" title="点一下填进去">'+esc(x)+'</b>'}).join(" ")+'</span></span>';
+  }).join("");
+}
+document.addEventListener("click",function(e){
+  var t=e.target;
+  if(t.dataset.set!==undefined){var i=+t.dataset.set;document.querySelector('#chips input[data-i="'+i+'"]').value=t.dataset.v;}
+});
+async function jget(url){
+  var t0=performance.now(), r=await fetch(url), txt=await r.text(), ms=Math.round(performance.now()-t0);
+  if(!r.ok){var msg;try{msg=JSON.parse(txt).error}catch(e){msg=txt.slice(0,160)||("HTTP "+r.status)}throw {status:r.status,msg:msg,ms:ms};}
+  return {r:r,txt:txt,ms:ms};
+}
+async function lookup(force){
+  var text=$("#text").value.trim(); if(!text){loaded="";$("#chips").innerHTML="";return "";}
+  if(!force && text===loaded && document.querySelectorAll("#chips input").length) return text;
+  try{var j=await jget("/api/lookup?text="+encodeURIComponent(text));renderChips(JSON.parse(j.txt));loaded=text;return text;}
+  catch(e){$("#src").textContent="查表失败："+e.msg;return text;}
+}
+async function say(engine,label){
+  var text=$("#text").value.trim(), rd=readings();
+  var row=document.createElement("div");row.className="row";
+  row.innerHTML="<div>"+esc(label)+"</div><div class='meta'>请求中…</div>";
+  $("#out").appendChild(row);
+  var meta=row.querySelector(".meta");
+  try{
+    var t0=performance.now();
+    var r=await fetch("/api/say?engine="+engine+"&text="+encodeURIComponent(text)+"&readings="+encodeURIComponent(rd));
+    var ms=Math.round(performance.now()-t0);
+    if(!r.ok){var body=await r.json().catch(function(){return {error:"HTTP "+r.status}});
+      meta.innerHTML="<span class='bad'>HTTP "+r.status+"</span> "+esc(body.error||"");return;}
+    var blob=await r.blob(), url=URL.createObjectURL(blob);
+    meta.innerHTML="<audio controls src='"+url+"'></audio><br>"+
+      "HTTP "+r.status+" · "+blob.size.toLocaleString()+" B · "+ms+" ms · 缓存 "+(r.headers.get("X-Cache")||"?")+
+      " · "+esc(r.headers.get("X-Voice")||"")+
+      (r.headers.get("X-Warn") ? "<br><span class='bad'>"+esc(decodeURIComponent(r.headers.get("X-Warn")))+"</span>" : "");
+    var raw = r.headers.get("X-SSML") || "";
+    $("#ssml").textContent=(raw ? decodeURIComponent(raw) : "—")+"\n输入读法："+rd;
+  }catch(e){meta.innerHTML="<span class='bad'>失败</span> "+esc(String(e.message||e));}
+}
+$("#all").onclick=async function(){await lookup(false);$("#out").innerHTML="";for(const e of ENGINES)await say(e.id,e.label);};
+$("#load").onclick=function(){lookup(true);};
+$("#text").addEventListener("keydown",function(e){if(e.key==="Enter")$("#all").onclick();});
+(async function(){ENGINES=(await (await fetch("/api/engines")).json());})();
+</script>
+</html>
