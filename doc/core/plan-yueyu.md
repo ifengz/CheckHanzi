@@ -440,3 +440,44 @@ CI：`check-client.mjs` 删掉 `speak(word, yuePlay,"yue")` 源码断言，改�
 一并砍掉：英文→粤语（要经"英→中释义串→挑词→粤拼"两次推导，且句子级粤拼覆盖率实测只有 25–38%）、单字→英文（多义比词更严重）、SW 全量音频离线（1.08 万个 MP3 ≈ 110MB）。
 配额账：3,494 字 + 7,364 词 ≈ 1.08 万次一次性合成，F0 档 20 次/分钟 ≈ 9 小时，字符量约 2 万 / 免费档 50 万。可行解是**服务器端一次性预热写进现有 TTS 缓存目录**（不需要 GPU），客户端零改动、iPad 零存储、之后点按零网络。
 
+
+## 31. 全网现成方案调研 + 三家粤语引擎盲测裁决（2026-10-12）
+
+**调研口径**：agent-reach 四路（GitHub 搜索、Jina 读文档、HF/npm 取包、厂商官网），候选一律拿回本地用我们自己的表跑命中率，不采信文档自述。
+
+**内容层没有可接入的成品**：Pleco 官方拒绝公开 API，商店只卖装进自家 App 的加载项（真人词音 $4.99、粤拼音色 $9.99、《现代汉语规范词典》$29.99，版权归外研社/商务/OUP）；Arch Chinese 条款明文禁止程序化访问；洪恩/宝宝巴士/悟空无授权入口；标贝/数据堂卖训练数据集不是可播放字库。→ **组词/释义/笔顺这层不能被替换，自建路线成立**。
+可白捡的只有开源字段：`theajack/cnchar`（MIT、3,104★、2026-08-02 仍维护）的**结构**列对我们 3,493 个字头覆盖 **3,453 = 98.9%**（左右 1,909 / 上下 849 / 半包围 298 / 独体 251 / 上中下 50 / 左中右 77 / 全包围 14 / 品字 5），这列我们现在没有。它的部首与现表交集 2,450 字、一致 89.7%，不一致几乎全是同一部首两种写法（人/亻、刀/刂、火/灬）→ **只取 struct，radical 不覆盖现表**。它的"释义"是假方案：`cnchar-explain` 包内 0 个汉字、运行时抓 `unpkg.com/cnchar-data@latest/explanation/`，内容是《汉语大词典》式词条（山→山呼/山讳，中位 1,130 字节），不是儿童可读的单字义项。KanjiVG 只覆盖 2,264/3,500 且 们汉图语说读车马鸟鱼风全缺（BY-SA）；字源图库一个无 LICENSE、一个 CC BY-NC-SA；OpenCC `HKPhrases.txt` 89 行全是人名异形 → 普→粤词汇表确实无开放源（与 §改写层已定"句子层不做"一致）。
+**普通话逐音节录音库**（备用底本，未接）：我们全表只需 **1,160 个带调音节**（一声 301/二声 230/三声 274/四声 324/轻声 31）。三套现成库命中率：`cnchar-data/voice` **99.3%**（MIT，17MB）、`hugolpz/audio-cmn` 97.2%（README 自述 BY-SA、**仓库无 LICENSE 文件**）、`davinfifield` 96.7%（**Unlicense 公有领域**，34MB）。三家同一音节 md5 互不相同 = 三段独立录音。未做：是否真人、声调是否达标（按 §"声调不由我的 F0 数字裁决"，要耳朵判）。
+
+**Google Cloud TTS 真调用实测**（key 已配、项目 566311513284；本机直连 `texttospeech.googleapis.com` = 000 超时，必须走 Clash 7897）：
+- 粤语 `yue-HK-Standard-A` 与普通话 `cmn-CN-Wavenet-A` 的 `<phoneme>` **真生效**：噪声基线（同请求连发两次）Δ0.0000 / 0.0017，`ngan4` vs `ngan2` **Δ0.8322**、`wo3` vs `wo1` **Δ0.8451**。裸字与标对调 Δ0.0000 → 两家默认都已读对，和 §"我"那条结论一致。
+- 两处实测坑：① API 侧 `customPronunciations{PHONETIC_ENCODING_PINYIN}` **静默无效**（wo4/wo2/裸字 三者 Δ≤0.0017）→ 只能用 SSML 内联；② **非法粤拼不报错**：`hyn3` 与合法 `hyun3` 返回逐字节相同音频 + HTTP 200 → Azure 那道 400 闸门在 Google 不存在，合法性必须我们自己在送合成前判（我们已有 1,861 音节表，Azure 那次实测线上 0 命中）。
+- `yue-HK` 无 Neural2/Studio（直接 400 `Voice does not exist`），只有 Standard-A~D 与 30 个 Chirp3-HD。配额 1,000 请求/分钟（Azure F0 是 20）→ 10,764 条预热从 **9.0 小时** 变单线程 1.8 小时、**并发 8 路约 13 分钟**。计费含 SSML 标签：全量 0.753M（整词单标签）～1.051M（逐字多标签）；免费档 Standard/WaveNet 4M 字符/月、Chirp3-HD 1M/月，超出 $4/1M 与 $30/1M，且要绑账单。
+
+**三家引擎盲测（`doc/test/yue-engine-abx/`，21 题 = 关键 5 + 控制 2 × 甲Azure/乙Google Standard/丙Google Chirp3，42 段同响度归一，判据先写死：关键 5/5 且 控制 2/2）**
+他耳朵判分结果：**甲 5/5 + 2/2 PASS、乙 5/5 + 2/2 PASS、丙 4/5 + 2/2 没通过**（丙2 笔 bat1 vs bat3 判"一样"）。控制组三家全对 → 问法成立，分数可用。
+- 结论一：**Chirp3-HD 出局**。它音质最贵（$30/1M）但有一道声调没照标签执行，正是教错的风险面。
+- 结论二：**Azure 与 Google Standard 在"照不照粤拼读"这项并列**，本轮测的是忠实度不是好听度 → 换不换 Google 不能由这张表决定。剩下的差项是运维账：Google 吞吐 50 倍、同 14 条体积 104KB 对 Azure 168KB（全量约 68MB 对 110MB）、同输入逐字节稳定；Azure 胜在已有 400 闸门、已接进生产、无需再绑一张账单。
+- 反向自检：丙只有 1 题失手，样本量下不能断言它系统性差；但**判据是事前写死的 5/5**，我不事后放宽。甲/乙同为 5/5 也不能证明它们"更好听"——那是另一个问题。
+- 待拍：要不要再出一轮**好听度三选一**（同一条 银行/公园/重量，甲乙两条，选更像粤语母语者的那条），用它来决定预热走哪家；不做就维持 Azure + 9 小时预热。
+
+## 32. 发音调试台 dev-pron-debug（2026-10-12，本地工具，不进发布物）
+
+`dev-pron-debug.py` + `dev-pron-debug.html`：输入字/词 → 按我们自己的表预填逐字读法（可改）→ 同一条分别喂现网 Azure 与 Google 两种音色，
+每行显示 HTTP 码 / 字节 / 耗时 / 缓存 HIT-MISS / 音色名，并列出送出去的 SSML。音频走 `voice_audio` 里**生产同一套** SSML 构造与响度归一，
+所以这里听到的等于线上会听到的。只绑 127.0.0.1，密钥只读 `~/.config/chazi/` 下文件、绝不下发给页面。
+
+跑法：`https_proxy=http://127.0.0.1:7897 uv run --with imageio-ffmpeg --python 3.12 python dev-pron-debug.py 8799`
+（本机直连 `texttospeech.googleapis.com` 是 000 超时，必须带代理；`voice_audio` 找 ffmpeg 靠 imageio-ffmpeg，系统 Python 没装会报 "FFmpeg 不可用"）。
+
+**这台工具当场测出来的三件事**：
+1. 响应头不能放汉字：`BaseHTTPRequestHandler` 按 latin-1 编头，把含汉字的 SSML 塞进 `X-SSML` 会让连接在半截断掉，浏览器只报 "Failed to fetch"，
+   而 curl 看着像 200 —— 已改成 `urllib.parse.quote` 后前端解码。
+2. 读法不合法时两家行为不同，且这条只能实测：`劝/银 = hyn3` 让 **Azure 回 400**（无响应体），**Google 一律 200 且静默按默认读法发** ——
+   缓存里 `gstd-…hyn3…` 与 `gstd-…ngan4…` 两份 MP3 **md5 逐字节相同**（Chirp3 同样）。→ 换 Google 的前提是把合法性判断搬到自己这边，
+   工具已内置这道闸门原型：拿 `cantonese-data.js` 现算出**本仓音节表 1,863 个音节**，不在表里的读法在行内标红字，但不拦合成（保留对照）。
+3. 按钮语义踩过一次：`三家并排合成` 原先每次都重查表，把用户刚改的读法覆盖掉 → 改成只在输入文字变化时重查，"重新按表填读法"才强制回填。
+
+**门禁**：`check-client` / `check-dictionary` 均 exit=0；后端 `tests/check_voice_backend.py` **16 passed / 1 failed**，
+失败的是 `test_real_edge_tts_is_normalized_with_peak_headroom`，与本次改动无关 —— 单跑 `edge_tts.Communicate('我','zh-CN-XiaoxiaoNeural')` 也复现
+`WSServerHandshakeError 403 … speech.platform.bing.com`，即**本机这条匿名 websocket 通道当下被微软拒**（HK 服务器出口是否同样要单独验；线上普通话/英文命中磁盘缓存时不受影响）。
