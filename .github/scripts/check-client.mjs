@@ -1069,7 +1069,7 @@ for (const fn of ["renderMixedEnglishDetail", "renderCombinedEnglishResult"]) {
   assert.match(body, /englishBlockEl\(/, `${fn} must render through the shared English block`);
   assert.ok(!/mixed-detail-en|combined-english-word/.test(body), `${fn} must not keep a private English layout`);
 }
-const enBlockStart = html.indexOf("function englishBlockEl(");
+const enBlockStart = html.indexOf("var FORM_NOTE");
 const enBlockEnd = html.indexOf("function renderMixedEnglishDetail(", enBlockStart);
 assert.ok(enBlockStart >= 0 && enBlockEnd > enBlockStart, "the shared English block must be a dedicated function");
 const enBox = new TestNode();
@@ -1092,10 +1092,17 @@ enBox.appendChild(enContext.englishBlockEl({ kind: "word", word: "apple", phonet
 const flatten = node => `${node.innerHTML || ''} ${node.textContent || ''} ${node.children.map(flatten).join(' ')}`;
 const blockHTML = flatten(enBox);
 const rowTexts = [];
-const collectRows = node => { if(String(node.className).split(/\s+/).includes("readout-row")) rowTexts.push(node.getAttribute("data-lang")); node.children.forEach(collectRows); };
+const rowLabels = [];
+const collectRows = node => { if(String(node.className).split(/\s+/).includes("readout-row")) { rowTexts.push(node.getAttribute("data-lang")); rowLabels.push(flatten(node).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()); } node.children.forEach(collectRows); };
 collectRows(enBox);
-assert.deepEqual(rowTexts, ["en", "en"], "an English word page may only speak English: the word and the sentence it came from");
+assert.deepEqual(rowTexts, ["en", "en", "en"], "the word, the sentence it came from, and each word form must all be speakable English rows");
 assert.ok(blockHTML.includes("I have an apple"), "the sentence the child spoke must stay visible");
+assert.ok(!/相关词形/.test(blockHTML), 'the grammar label "相关词形" must not face the child');
+const coded = enContext.englishBlockEl({ kind: "word", word: "have", forms: [{ form: "having", code: "i" }, { form: "had", code: "p" }, { form: "has", code: "3" }] }, "have", "");
+const codedLabels = [];
+const collectCoded = node => { if(String(node.className).split(/\s+/).includes("readout-row")) codedLabels.push(flatten(node).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()); node.children.forEach(collectCoded); };
+collectCoded(coded);
+assert.deepEqual(codedLabels, ["英文 have", "正在做 having", "过去式 had", "他/她/它 has"], 'each word form must carry a plain-Chinese note a child can read');
 enContext.englishBlockEl({ kind: "sentence", translation: "苹果汁" }, "apple juice");
 assert.ok(enSpoken.length === 0, "building the block must not start audio");
 assert.equal(typeof createEnglishLookup, 'function', 'English lookup factory must register');

@@ -114,13 +114,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .en-block-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 .en-block-word{font-size:clamp(34px,6vh,62px);font-weight:800;color:#216C76;line-height:1.1}
 .en-block .rows{margin-top:14px}
+.en-block .readout-row{font-size:clamp(17px,2.3vh,22px)}
 .en-block-meanings{margin-top:14px;display:flex;flex-direction:column;gap:6px}
-.en-block-meaning{display:flex;gap:10px;align-items:baseline;font-size:clamp(16px,2.1vh,20px);color:#4A443F}
-.en-block-pos{font-size:14px;color:#7A8B4F;font-weight:700;min-width:34px}
+.en-block-meaning{display:flex;gap:12px;align-items:baseline;font-size:clamp(19px,2.6vh,26px);color:#3D3833}
+.en-block-pos{font-size:16px;color:#7A8B4F;font-weight:700;min-width:46px}
 .en-block-extra{margin-top:16px}
-.en-block-label{font-size:14px;color:#52636a;font-weight:700;margin-bottom:6px}
+.en-block-label{font-size:17px;color:#52636a;font-weight:700;margin-bottom:6px}
 .en-block-extra .rows{margin-top:0}
-.en-block-forms{font-size:15px;color:#6C6259}
 #detailYue .readout-row{font-size:clamp(26px,3.4vh,36px);}
 .word-card .wyue{font-size:clamp(15px,2vh,20px);color:#216C76;font-weight:700;line-height:1.15;letter-spacing:0;}
 .word-card{padding:8px 8px 10px;gap:6px}
@@ -1894,6 +1894,18 @@ function yueLabelOf(text){
   return yueAlign(text).map(function(row){ return row.jp || ""; }).join(" ");
 }
 // 英文结果只有一种版面：原文 + 音标 + 读法条 + 释义 + 句中词组 / 相关词形
+var FORM_NOTE = { i:"正在做", p:"过去式", d:"完成后", "3":"他/她/它", s:"好几个", r:"更加", t:"最…" };
+// 词形来自服务端 exchange 字段；线上还没升级时只会给字符串，那就只显字不给说明。
+function englishFormRows(forms){
+  var box = document.createElement("div"); box.className = "rows en-block-form-rows";
+  forms.slice(0, 5).forEach(function(item){
+    var form = typeof item === "string" ? item : (item && item.form) || "";
+    if(!form) return;
+    var code = typeof item === "string" ? "" : (item && item.code) || "";
+    box.appendChild(readoutRow(FORM_NOTE[code] || "英文", "en", form, esc(form), "wen", "读英文「" + form + "」"));
+  });
+  return box.children.length ? box : null;
+}
 function englishBlockEl(result, query, contextPhrase){
   var isWord = !!(result && result.kind === "word");
   var spoken = isWord && result.word ? result.word : query;
@@ -1926,8 +1938,9 @@ function englishBlockEl(result, query, contextPhrase){
         extra.appendChild(phraseRows);
       }
       if(forms.length){
-        var fl = document.createElement("div"); fl.className = "en-block-label"; fl.textContent = "相关词形"; fl.style.marginTop = "12px"; extra.appendChild(fl);
-        var fv = document.createElement("div"); fv.className = "en-block-forms"; fv.textContent = forms.slice(0, 5).join("、"); extra.appendChild(fv);
+        var fl = document.createElement("div"); fl.className = "en-block-label"; fl.textContent = "还可以这样写"; fl.style.marginTop = "12px"; extra.appendChild(fl);
+        var formRows = englishFormRows(forms);
+        if(formRows) extra.appendChild(formRows);
       }
       block.appendChild(extra);
     }
