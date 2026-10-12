@@ -24,7 +24,8 @@ assert.match(html, /id="combinedEnglishResult"/, 'combined results must reserve 
 assert.match(html, /function showCombinedSentenceMode\(/, 'mixed speech must render through the combined result mode');
 assert.match(html, /className\s*=\s*['"]mixed-char-button['"]/, 'Chinese characters in a mixed sentence must keep individual touch targets');
 assert.match(html, /hanzi\.length >= 2 \|\| \(hanzi\.length >= 1 && hasLatin\)/, 'mixed Chinese and Latin speech must use the sentence result view');
-assert.match(html, /function showSentenceMode\(text\)\{\s*if\(\/\[A-Za-z\]\/.test\(text\)\)/, 'sentence history must restore the same combined result view');
+assert.match(html, /function showSentenceMode\(text\)\{\s*showCombinedSentenceMode\(text\);\s*\}/, 'every sentence must restore through the one combined result view');
+assert.equal((html.match(/var isMixedSentence/g) || []).length, 0, 'a pure Chinese sentence must not fall back to a second sentence layout');
 
 const lookupCounterStart = html.indexOf('var lookupCount = 0;');
 const lookupCounterEnd = html.indexOf('function showWorkspace(', lookupCounterStart);
@@ -118,6 +119,7 @@ const asrContext = vm.createContext({
   audioCtx: { sampleRate: 16000 },
   resample: samples => samples,
   floatToWav: () => new Blob(),
+  document: { getElementById: () => null },
   window: {},
 });
 vm.runInContext(html.slice(asrStart, asrEnd), asrContext);
@@ -927,25 +929,98 @@ const findByAttribute = (node, name, value) => {
   }
   return null;
 };
+// ── 粤语朗读：语言不能被收敛成中英二值，缓存键必须带粤拼 ──────────
+const ttsLangStart = html.indexOf('function ttsLang(');
+const ttsLangEnd = html.indexOf('function speak(', ttsLangStart);
+assert.ok(ttsLangStart >= 0 && ttsLangEnd > ttsLangStart, 'TTS must keep a three-way language normaliser');
+let langStub = { rows: [{ ch: '银', jp: 'ngan4', state: 'word' }, { ch: '行', jp: 'hong4', state: 'word' }] };
+const langContext = vm.createContext({ yueAlign: () => langStub.rows, TTS_VERSION: /var TTS_VERSION\s*=\s*"([^"]+)"/.exec(html)[1] });
+vm.runInContext(html.slice(ttsLangStart, ttsLangEnd), langContext);
+assert.equal(langContext.ttsLang('yue'), 'yue', 'Cantonese must survive as its own TTS language');
+assert.equal(langContext.ttsLang(undefined), 'zh', 'unknown languages must still fall back to Mandarin');
+assert.equal(langContext.ttsLang('en'), 'en', 'English stays English');
+const yueKey = langContext.ttsKey('银行', 'yue');
+assert.ok(yueKey.includes('ngan4') && yueKey.includes('hong4'), 'the Cantonese cache key must contain the readings');
+assert.notEqual(yueKey, langContext.ttsKey('银行', 'zh'), 'Cantonese and Mandarin audio must never share a cache key');
+langStub = { rows: [{ ch: '银', jp: 'ngan4', state: 'word' }, { ch: '行', jp: 'hang4', state: 'word' }] };
+assert.notEqual(yueKey, langContext.ttsKey('银行', 'yue'), 'different readings of the same text must not reuse one cache entry');
+const readoutStart = html.indexOf('function readoutRow(');
+const readoutEnd = html.indexOf('function renderDetail(', readoutStart);
+assert.ok(readoutStart >= 0 && readoutEnd > readoutStart, 'every readout language must share one tappable row component');
+
 const renderWordsStart = html.indexOf('function renderWords(');
 const renderWordsEnd = html.indexOf('document.addEventListener("pointerdown"', renderWordsStart);
 assert.ok(renderWordsStart >= 0 && renderWordsEnd > renderWordsStart, 'Chinese word cards must be rendered by a dedicated function');
 const wordBox = new TestNode();
 const selectedChineseWords = [];
+const spokenWords = [];
+let wordReadings = 'fa1 do2';
 const wordContext = vm.createContext({
   current: '花',
   $: id => id === 'words' ? wordBox : null,
-  document: { createElement: () => new TestNode() },
+  document: { createElement: () => new TestNode(), LucideIcons: undefined },
+  window: { LucideIcons: { icon: () => new TestNode("svg") } },
   esc: text => String(text),
   addHistory: (character, word) => selectedChineseWords.push([character, word]),
-  speak() {},
+  speak(...args) { spokenWords.push(args); },
+  prefetchTTS: () => Promise.resolve({ samples: new Float32Array(1), sampleRate: 24000 }),
   fitResultCards() {},
   requestAnimationFrame: callback => callback(),
+  // 粤拼来自构建期离线表 cantonese-data.js；这里给固定桩，只验证词卡真把逐字读法渲染出来
+  yueAlign: word => Array.from(word).map((ch, index) => ({ ch, jp: index === 0 ? 'fa1' : 'do2', state: 'word' })),
+  yueReadings: () => wordReadings,
 });
+vm.runInContext(html.slice(readoutStart, readoutEnd), wordContext);
 vm.runInContext(html.slice(renderWordsStart, renderWordsEnd), wordContext);
 wordContext.renderWords({ w:['花朵'] });
-wordBox.children[0].click();
-assert.deepEqual(selectedChineseWords, [['花', '花朵']], 'selecting a Chinese word must persist the word, not only its current character');
+const cardNode = wordBox.children[0];
+const zhRow = findByAttribute(cardNode, 'data-lang', 'zh');
+const yueRow = findByAttribute(cardNode, 'data-lang', 'yue');
+assert.ok(zhRow && yueRow, 'a word card must show tappable Mandarin and Cantonese rows');
+assert.match(yueRow.innerHTML, /class="wyue">fa1 do2</, 'Chinese word cards must show the per-character Cantonese reading');
+assert.ok(!yueRow.innerHTML.includes('?') && !/class="note"/.test(html), 'the Cantonese row must not carry a doubt marker: it changes the audio not at all');
+let rowPropagationStopped = false;
+yueRow.listeners.click({ stopPropagation: () => { rowPropagationStopped = true; } });
+assert.ok(rowPropagationStopped, 'tapping the readout row must not also fire the card action');
+assert.deepEqual(spokenWords, [['花朵', yueRow, 'yue']], 'the readout row must hand its own language to the player');
+wordReadings = '';
+wordContext.renderWords({ w:['花朵'] });
+assert.equal(findByAttribute(wordBox.children[0], 'data-lang', 'yue'), null, 'a word without Cantonese data must not render a Cantonese row');
+assert.ok(findByAttribute(wordBox.children[0], 'data-lang', 'zh'), 'the Mandarin row must stay even when Cantonese is missing');
+
+const mixedTokensStart = html.indexOf('function renderMixedSentenceTokens(');
+const mixedTokensEnd = html.indexOf('function clearMixedTokenSelection(', mixedTokensStart);
+assert.ok(mixedTokensStart >= 0 && mixedTokensEnd > mixedTokensStart, 'mixed sentence tokens must be rendered by a dedicated function');
+const echoBox = new TestNode('div');
+const tokenRow = Object.assign(new TestNode('div'), { id: 'mixedTokenRow' });
+const tokenContext = vm.createContext({
+  $: id => (id === 'voiceEcho' ? echoBox : null),
+  document: { createElement: tag => new TestNode(tag) },
+  DICT: { 花: {}, 朵: {} },
+  toast() {},
+  renderMixedChineseDetail() {},
+  renderDetail() {},
+  addHistory() {},
+  current: '',
+  detailFrom: '',
+  // 逐字粤拼由离线表推导；这里固定成「花=fa1 朵=do2」，只验证对齐渲染
+  yueAlign: text => Array.from(text).map((ch, index) => (/[\u3400-\u9fff]/.test(ch)
+    ? { ch, jp: index === 0 ? 'fa1' : 'do2', state: 'word' }
+    : { ch, jp: null, state: 'na' })),
+});
+vm.runInContext(html.slice(mixedTokensStart, mixedTokensEnd), tokenContext);
+tokenContext.renderMixedSentenceTokens('花朵 apple', tokenRow);
+const firstToken = tokenRow.children[0];
+assert.equal(firstToken.className, 'mixed-token', 'each Chinese token must wrap the character and its Cantonese reading');
+assert.ok(findByClass(firstToken, 'mixed-inline-token'), 'the wrapped token must keep the character touch target');
+assert.equal(findByClass(firstToken, 'yue'), null, 'the token row must show only what the child said, no per-character readings');
+const latinToken = findByClass(tokenRow, 'mixed-latin-button');
+assert.ok(latinToken && !findByClass(latinToken, 'yue'), 'Latin tokens must not be given a Cantonese reading');
+const zhCardRow = findByAttribute(cardNode, 'data-lang', 'zh');
+assert.ok(zhCardRow, 'the word card must expose a Mandarin readout row');
+zhCardRow.listeners.click({ stopPropagation(){} });
+assert.deepEqual(selectedChineseWords, [['花', '花朵']], 'the Mandarin row must still record the word into history');
+assert.equal(spokenWords.length, 1, 'only the readout rows may start audio');
 const englishRoot = new TestNode();
 const englishResponses = [
   { ok:true, json: async () => ({ kind:'sentence', translation:'我喜欢苹果。', source:{ name:'MyMemory', url:'https://mymemory.translated.net/' } }) },
@@ -986,6 +1061,50 @@ const englishContext = vm.createContext({
   },
 });
 vm.runInContext(englishScript, englishContext);
+// ── 英文结果只允许一种版面：整句结果卡和点词详情共用同一个渲染 ──
+for (const fn of ["renderMixedEnglishDetail", "renderCombinedEnglishResult"]) {
+  const start = html.indexOf(`function ${fn}(`);
+  assert.ok(start >= 0, `${fn} must exist`);
+  const body = html.slice(start, html.indexOf("\nfunction ", start + 10));
+  assert.match(body, /englishBlockEl\(/, `${fn} must render through the shared English block`);
+  assert.ok(!/mixed-detail-en|combined-english-word/.test(body), `${fn} must not keep a private English layout`);
+}
+const enBlockStart = html.indexOf("var FORM_NOTE");
+const enBlockEnd = html.indexOf("function renderMixedEnglishDetail(", enBlockStart);
+assert.ok(enBlockStart >= 0 && enBlockEnd > enBlockStart, "the shared English block must be a dedicated function");
+const enBox = new TestNode();
+const enSpoken = [];
+const enContext = vm.createContext({
+  document: { createElement: () => new TestNode(), LucideIcons: undefined },
+  window: { LucideIcons: { icon: () => new TestNode("svg") } },
+  esc: text => String(text),
+  speak: (...args) => enSpoken.push([args[0], args[2]]),
+  yueReadings: text => (text === "苹果汁" ? "ping4 gwo2 zap1" : ""),
+  readoutRow: (tag, lang, text, labelHtml, labelClass) => {
+    const row = new TestNode("button");
+    row.className = "readout-row"; row.setAttribute("data-lang", lang); row.innerHTML = tag + " " + labelHtml;
+    row.listeners.click = () => enSpoken.push([text, lang]);
+    return row;
+  },
+});
+vm.runInContext(html.slice(enBlockStart, enBlockEnd), enContext);
+enBox.appendChild(enContext.englishBlockEl({ kind: "word", word: "apple", phonetic: "'æpl", forms: ["apples"], meanings: [{ partOfSpeech: "n.", translation: "苹果, 家伙" }, { partOfSpeech: "", translation: "[医] 苹果" }] }, "apple", "I have an apple"));
+const flatten = node => `${node.innerHTML || ''} ${node.textContent || ''} ${node.children.map(flatten).join(' ')}`;
+const blockHTML = flatten(enBox);
+const rowTexts = [];
+const rowLabels = [];
+const collectRows = node => { if(String(node.className).split(/\s+/).includes("readout-row")) { rowTexts.push(node.getAttribute("data-lang")); rowLabels.push(flatten(node).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()); } node.children.forEach(collectRows); };
+collectRows(enBox);
+assert.deepEqual(rowTexts, ["en", "en", "en"], "the word, the sentence it came from, and each word form must all be speakable English rows");
+assert.ok(blockHTML.includes("I have an apple"), "the sentence the child spoke must stay visible");
+assert.ok(!/相关词形/.test(blockHTML), 'the grammar label "相关词形" must not face the child');
+const coded = enContext.englishBlockEl({ kind: "word", word: "have", forms: [{ form: "having", code: "i" }, { form: "had", code: "p" }, { form: "has", code: "3" }] }, "have", "");
+const codedLabels = [];
+const collectCoded = node => { if(String(node.className).split(/\s+/).includes("readout-row")) codedLabels.push(flatten(node).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()); node.children.forEach(collectCoded); };
+collectCoded(coded);
+assert.deepEqual(codedLabels, ["英文 have", "正在做 having", "过去式 had", "他/她/它 has"], 'each word form must carry a plain-Chinese note a child can read');
+enContext.englishBlockEl({ kind: "sentence", translation: "苹果汁" }, "apple juice");
+assert.ok(enSpoken.length === 0, "building the block must not start audio");
 assert.equal(typeof createEnglishLookup, 'function', 'English lookup factory must register');
 const englishController = createEnglishLookup({
   root: englishRoot,
@@ -1320,4 +1439,21 @@ assert.deepEqual(EnglishHistoryCalls, [['older', false, true, true]], 'opening a
 historyContext.returnFromEnglishHistory();
 historyElement('histBack').click();
 assert.deepEqual(restoredEnglishViews, [originalEnglishHistoryView], 'English history exit must restore the result that originally opened history');
-console.log('Client syntax, audio resampling, and umlaut pinyin checks passed');
+// 笔顺格子：每行最多 8 个，并且要把整行宽度用满（孩子看不清就是这两条被破坏）
+const fitStart = html.indexOf('function fitStrokeCells(');
+const fitEnd = html.indexOf('\n}', fitStart) + 2;
+assert.ok(fitStart >= 0 && fitEnd > fitStart, 'the stroke cell fitter must exist');
+const fitBox = vm.runInNewContext(`(${html.slice(fitStart, fitEnd)})`, { getComputedStyle: () => ({ columnGap: '8px' }) }) ;
+for (const W of [320, 423, 706, 997, 1304, 1764, 2224, 3000]) {
+  for (const n of [1, 4, 8, 10, 17]) {
+    const cells = Array.from({ length: n }, () => ({ style: {} }));
+    const box = { clientWidth: W, style: {}, querySelectorAll: (sel) => (sel === '.stroke-cell' ? cells : []) };
+    fitBox(box, n);
+    const size = parseFloat(cells[0].style.width);
+    assert.ok(size >= 64, `stroke cells must stay tappable at width ${W} with ${n} strokes, got ${size}px`);
+    const perRow = Math.min(n, Math.floor((W + 8) / (size + 8)));
+    assert.ok(perRow <= 8, `a ${W}px panel would fit ${perRow} stroke cells per row for ${n} strokes (cell ${size}px)`);
+    if (n >= 8) assert.ok(perRow >= 4, `stroke cells waste the row at width ${W}: only ${perRow} fit (${size}px)`);
+  }
+}
+console.log('Client syntax, audio resampling, umlaut pinyin, and stroke grid checks passed');

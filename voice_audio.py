@@ -8,6 +8,7 @@ import pathlib
 import re
 import subprocess
 import tempfile
+import xml.sax.saxutils as sx
 
 
 TTS_VERSION = "2"
@@ -19,17 +20,27 @@ TTS_BITRATE = "48k"
 TTS_VOICES = {
     "zh": "zh-CN-XiaoxiaoNeural",
     "en": "en-US-JennyNeural",
+    # 粤语走 Azure 官方接口：只有它能让我们用 `alphabet="sapi"` 把粤拼逐字喂进去。
+    # 选 HiuMaan 的依据见 doc/core/plan-yueyu.md §25/§26：三个音色里只有它第 1 声不掉下去。
+    "yue": "zh-HK-HiuMaanNeural",
 }
+AZURE_OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3"
+JYUTPING = re.compile(r"^[a-z]+[0-9]$")
 
 
 class VoiceAudioError(RuntimeError):
     pass
 
 
+class ReadingRejectedError(VoiceAudioError):
+    """上游说这个读法它发不出来（4xx）：是送进去的粤拼问题，不是我们连不上上游。"""
+    pass
+
+
 def parse_language(value: str) -> str:
     language = (value or "zh").strip().lower()
     if language not in TTS_VOICES:
-        raise ValueError("lang 仅支持 zh 或 en")
+        raise ValueError("lang 仅支持 zh、en 或 yue")
     return language
 
 
@@ -37,9 +48,42 @@ def voice_for_language(language: str) -> str:
     return TTS_VOICES[parse_language(language)]
 
 
-def tts_cache_key(text: str, language: str, voice: str) -> str:
+def tts_cache_key(text: str, language: str, voice: str, readings: str = "") -> str:
+    # 粤语的音频由 readings 决定，必须进 key，否则同一句换读法会命中旧音频。
+    # readings 只在 yue 时参与，保证 zh/en 的既有缓存键一字不变（不作废现网音频）。
     contract = "\0".join((TTS_VERSION, language, voice, str(TTS_TARGET_LUFS), str(TTS_TRUE_PEAK_DB), text))
+    if language == "yue":
+        contract += "\0" + readings
     return hashlib.sha256(contract.encode("utf-8")).hexdigest()
+
+
+def split_readings(raw: str) -> list:
+    return [item for item in re.split(r"[\s,|]+", (raw or "").strip()) if item != ""]
+
+
+def jyutping_to_sapi(item: str) -> str:
+    """Azure 的 zh-HK sapi 要"音节 空格 声调"；写成 ngan4 会被回一个没有正文的 400"""
+    return f"{item[:-1]} {item[-1]}" if item and item[-1].isdigit() else item
+
+
+def azure_ssml(text: str, readings, voice: str) -> str:
+    """逐字包 <phoneme alphabet="sapi">；非汉字原样保留。读法不合法就直接拒，绝不把外部字符串拼进 SSML。"""
+    items = split_readings(readings) if isinstance(readings, str) else list(readings or [])
+    han = [ch for ch in text if "\u3400" <= ch <= "\u9fff"]
+    if len(items) != len(han):
+        raise VoiceAudioError(f"粤拼数量 {len(items)} 与汉字数 {len(han)} 不一致")
+    for item in items:
+        if not JYUTPING.match(item):
+            raise VoiceAudioError(f"粤拼格式不合法：{item!r}")
+    parts, index = [], 0
+    for ch in text:
+        if "\u3400" <= ch <= "\u9fff":
+            parts.append(f'<phoneme alphabet="sapi" ph="{sx.escape(jyutping_to_sapi(items[index]))}">{sx.escape(ch)}</phoneme>')
+            index += 1
+        else:
+            parts.append(sx.escape(ch))
+    return ("<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-HK'>"
+            f"<voice name='{sx.escape(voice)}'>{''.join(parts)}</voice></speak>")
 
 
 def _ffmpeg_command(arguments):

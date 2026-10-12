@@ -126,8 +126,9 @@ def _forms(exchange, word):
     for item in (exchange or "").split("/"):
         code, separator, form = item.partition(":")
         if separator and code in _FORM_CODES and len(form) > 1 and form != word:
-            forms.append(form)
-    return list(dict.fromkeys(forms))
+            forms.append({"form": form, "code": code})
+    unique = list(dict.fromkeys((entry["form"], entry["code"]) for entry in forms))
+    return [{"form": form, "code": code} for form, code in unique]
 
 
 class Dictionary:

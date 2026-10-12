@@ -29,3 +29,30 @@ It is derived from Make Me a Hanzi and distributed under the Arphic Public
 License; the required unmodified license is retained in `sources/ARPHICPL.TXT`.
 The generated stroke JSON changes file layout only and is freely available in
 this repository under that license.
+
+## Cantonese readings (`cantonese-data.js`)
+
+`cantonese-data.js` is generated offline by `generate_cantonese.py`; the page reads it as a
+static file and makes no network call for Cantonese. Three pinned sources are used:
+
+- Character candidates: the government `電腦用漢字粵語拼音表` list from
+  `lshk-org/jyutping-table` (`list.tsv`), **CC BY 4.0**, checksum recorded in `source-lock.json`.
+  Attribution as required by that licence: © 政府粵語拼音表，via `lshk-org/jyutping-table`.
+- Single-reading fallback for characters missing above: Unicode Unihan `kCantonese`,
+  Unicode 17.0.0 under the Unicode Licence v3 (already retained in `sources/UNICODE-LICENSE.txt`).
+- Per-word readings: `ToJyutping` (BSD-2-Clause), whose own data derives from
+  `rime-cantonese` (CC BY 4.0). ToJyutping applies tone sandhi, which matches the agreed
+  display standard of the *actual* reading rather than the dictionary form.
+
+A word enters the word table only when every character reading is one of that character's
+official candidates. Words that fail this test are listed in `unverified` (90 of 7,364) and
+fall back to per-character candidates, which the page marks as `多读` instead of presenting a
+single confident reading. Rebuild with the command in `generate_cantonese.py`.
+
+Fetch the pinned inputs before rebuilding (they live outside the repository, e.g. `/tmp`):
+
+```sh
+curl -sLo /tmp/jp.tsv https://raw.githubusercontent.com/lshk-org/jyutping-table/master/list.tsv
+curl -sLo /tmp/Unihan.zip https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip
+shasum -a 256 /tmp/jp.tsv /tmp/Unihan.zip   # must equal source-lock.json
+```

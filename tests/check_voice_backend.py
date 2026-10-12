@@ -219,6 +219,17 @@ class VoiceBackendContractTest(unittest.TestCase):
         response = server_voice.app.test_client().get("/api/tts?text=apple&lang=fr")
         self.assertEqual(response.status_code, 400)
 
+    def test_upstream_rejects_a_reading_as_bad_input_not_gateway_failure(self):
+        client = server_voice.app.test_client()
+        with patch.object(server_voice, "azure_tts_generate",
+                          side_effect=voice_audio.ReadingRejectedError("Azure 不接受这个读法 HTTP 400")):
+            rejected = client.get("/api/tts?text=%E5%8A%9D&lang=yue&readings=hyn3")
+        self.assertEqual(rejected.status_code, 400)
+        with patch.object(server_voice, "azure_tts_generate",
+                          side_effect=RuntimeError("Azure 合成失败 HTTP 503")):
+            upstream = client.get("/api/tts?text=%E5%8A%9D&lang=yue&readings=hyun3")
+        self.assertEqual(upstream.status_code, 502)
+
     def test_silent_measurement_is_not_a_normalized_voice(self):
         with self.assertRaises(voice_audio.VoiceAudioError):
             voice_audio._parse_measurement('{"input_i":"-inf","input_tp":"-inf","input_lra":"0","input_thresh":"-70","target_offset":"inf"}')
