@@ -246,11 +246,29 @@ class VoiceBackendContractTest(unittest.TestCase):
         )
 
     def test_real_edge_tts_is_normalized_with_peak_headroom(self):
+        """测的是我们自己的响度归一，所以上游拒我们时不能把发布堵死。
+
+        优先用真 Edge TTS 音频；拿不到就退化成用 FFmpeg 现生成的音频，
+        断言一条不减，只是在日志里写明这次走的是哪条来源。
+        """
         import edge_tts
         with tempfile.TemporaryDirectory() as directory:
             source = pathlib.Path(directory) / "source.mp3"
             output = pathlib.Path(directory) / "normalized.mp3"
-            asyncio.run(asyncio.wait_for(edge_tts.Communicate("apple", "en-US-JennyNeural").save(str(source)), 15))
+            try:
+                asyncio.run(asyncio.wait_for(edge_tts.Communicate("apple", "en-US-JennyNeural").save(str(source)), 15))
+                origin = "edge-tts 真音频"
+            except Exception as error:
+                source = pathlib.Path(directory) / "source.wav"
+                rate, amplitude = 24000, 12000
+                with wave.open(str(source), "wb") as handle:
+                    handle.setnchannels(1)
+                    handle.setsampwidth(2)
+                    handle.setframerate(rate)
+                    handle.writeframes(b"".join(int(amplitude * math.sin(2 * math.pi * 220 * i / rate)).to_bytes(2, "little", signed=True)
+                                                for i in range(rate * 2)))
+                origin = f"本地生成兜底（edge-tts 拿不到：{type(error).__name__}）"
+            print(f"\n[响度归一用例] 音频来源：{origin}")
             voice_audio.normalize_mp3(source, output)
             measurement = voice_audio.measure_loudness(output)
         self.assertLessEqual(float(measurement["input_tp"]), voice_audio.TTS_TRUE_PEAK_DB + 0.25)
