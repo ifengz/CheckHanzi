@@ -19,10 +19,12 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
-import voice_audio
+HERE = pathlib.Path(__file__).resolve().parent
+ROOT = HERE.parents[1]          # 仓库根，读离线表与 import voice_audio 用
+sys.path.insert(0, str(ROOT))
+import voice_audio  # noqa: E402
 
-ROOT = pathlib.Path(__file__).resolve().parent
-PAGE = ROOT / "dev-pron-debug.html"
+PAGE = HERE / "dev-pron-debug.html"
 CACHE = pathlib.Path(os.environ.get("PRON_DEBUG_CACHE", "/tmp/chazi-pron-debug"))
 AZURE_KEY_FILE = os.path.expanduser("~/.config/chazi/azure_speech_key")
 GOOGLE_KEY_FILE = os.path.expanduser("~/.config/chazi/gcp_tts_key")
