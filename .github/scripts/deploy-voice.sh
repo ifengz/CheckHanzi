@@ -12,6 +12,15 @@ PORT=5001
 log(){ echo "[voice-deploy] $*"; }
 fail(){ log "FATAL: $*"; exit 1; }
 
+# Credentials are required before changing the running release.
+ENV_FILE="$APP_DIR/env"
+[ -s "$ENV_FILE" ] || fail "缺少粤语朗读凭据文件"
+chmod 600 "$ENV_FILE" || fail "无法限制凭据文件权限"
+set -a
+. "$ENV_FILE" || fail "无法读取粤语朗读凭据"
+set +a
+[ -n "${AZURE_SPEECH_KEY:-}" ] && [ -n "${AZURE_SPEECH_REGION:-}" ] || fail "粤语朗读凭据不完整"
+
 # ---- 0) 目录 & 现役进程探测 ----
 mkdir -p "$APP_DIR" 2>/dev/null || sudo -n mkdir -p "$APP_DIR" || fail "无法创建 $APP_DIR"
 
@@ -123,6 +132,23 @@ gzip -dc "$RELEASE_DIR/data/english/ecdict.sqlite3.gz" > "$RELEASE_DIR/data/engl
 mv "$RELEASE_DIR/data/english/ecdict.sqlite3.tmp" "$RELEASE_DIR/data/english/ecdict.sqlite3" || fail "英文词库准备失败"
 "$PY" "$RELEASE_DIR/.github/scripts/check-english.py" || fail "英文词库和接口校验失败"
 "$PY" -m py_compile "$RELEASE_DIR/server-voice.py" "$RELEASE_DIR/voice_audio.py" "$RELEASE_DIR/english_lookup.py" || fail "后端语法检查失败"
+# A fresh cache forces the staged backend to use the actual Azure credentials.
+"$PY" - "$RELEASE_DIR" <<'PY' || fail "待发布后端粤语真实合成失败，保留现役代码和进程"
+import importlib.util, os, sys, tempfile
+from pathlib import Path
+release = Path(sys.argv[1])
+sys.path.insert(0, str(release))
+with tempfile.TemporaryDirectory(prefix="chazi-yue-preflight-") as cache:
+    os.environ["TTS_CACHE_DIR"] = cache
+    spec = importlib.util.spec_from_file_location("staged_voice", release / "server-voice.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    response = module.app.test_client().get("/api/tts", query_string={"text": "银", "lang": "yue", "readings": "ngan4"})
+    assert response.status_code == 200, f"粤语 HTTP {response.status_code}"
+    assert response.mimetype == "audio/mpeg" and len(response.data) > 500, "粤语响应不是有效音频"
+    assert response.headers.get("X-TTS-Version") == "2", "粤语音频版本错误"
+    print(f"[voice-deploy] 待发布粤语真实合成通过: HTTP 200, {len(response.data)} bytes", flush=True)
+PY
 mkdir -p "$APP_DIR/data/english" || fail "英文数据目录创建失败"
 for name in ecdict.sqlite3 ECDICT-LICENSE.txt manifest.json; do
   mv "$RELEASE_DIR/data/english/$name" "$APP_DIR/data/english/$name" || fail "英文词库安装失败: $name"
@@ -132,25 +158,21 @@ for name in voice_audio.py english_lookup.py server-voice.py; do
 done
 
 # ---- 2.9) 粤语朗读凭据：EnvironmentFile 挂到 unit（值由 Actions 那侧经 stdin 写入，不进命令行）----
-ENV_FILE="$APP_DIR/env"
-if [ -n "$UNIT" ] && [ -f "$ENV_FILE" ]; then
+if [ -n "$UNIT" ]; then
   UPATH=$(systemctl show -p FragmentPath --value "$UNIT" 2>/dev/null)
-  if [ -n "$UPATH" ] && [ -f "$UPATH" ] && ! grep -q "^EnvironmentFile=$ENV_FILE" "$UPATH"; then
+  [ -n "$UPATH" ] && [ -f "$UPATH" ] && grep -q '^\[Service\]' "$UPATH" || fail "无法给语音服务挂载凭据"
+  if ! grep -qxF "EnvironmentFile=$ENV_FILE" "$UPATH"; then
     log "给 $UPATH 挂 EnvironmentFile=$ENV_FILE"
-    cp "$UPATH" "$UPATH.bak-env"
-    sed -i "/^\[Service\]/a EnvironmentFile=$ENV_FILE" "$UPATH"
-    systemctl daemon-reload
-  elif [ -n "$UPATH" ]; then
-    log "EnvironmentFile 已挂或 unit 无 [Service] 段，跳过"
+    cp "$UPATH" "$UPATH.bak-env" || fail "unit 备份失败"
+    sed -i "/^\[Service\]/a EnvironmentFile=$ENV_FILE" "$UPATH" || fail "unit 凭据挂载失败"
+    systemctl daemon-reload || fail "unit 重载失败"
   fi
-elif [ ! -f "$ENV_FILE" ]; then
-  log "缺 $ENV_FILE：粤语朗读会继续报 502（在 Actions 里加 AZURE_SPEECH_KEY secret 即可自动写入）"
 fi
 
 # ---- 3) 重启 ----
 if [ -n "$UNIT" ]; then
   log "systemd 重启: $UNIT"
-  systemctl restart "$UNIT"
+  systemctl restart "$UNIT" || fail "语音服务重启失败"
 elif [ -n "$PID" ]; then
   log "无 systemd，原样 nohup 重启（同解释器/同目录/同环境）"
   tr "\0" "\n" < "/proc/$PID/environ" > /tmp/voice_env.$$ 2>/dev/null || : > /tmp/voice_env.$$
@@ -173,9 +195,30 @@ for i in $(seq 1 20); do
   if printf '%s' "$RESP" | "$PY" -c 'import json,sys; assert json.load(sys.stdin).get("ok") is True' 2>/dev/null; then
     ENGLISH=$(curl -s --max-time 5 -H 'Content-Type: application/json' --data '{"text":"apple"}' "http://127.0.0.1:$PORT/api/english" || true)
     printf '%s' "$ENGLISH" | "$PY" -c 'import json,sys; result=json.load(sys.stdin); assert result.get("kind") == "word" and result.get("word") == "apple" and result.get("meanings")' || fail "英文单词线上查询验证失败"
-    YUE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "http://127.0.0.1:$PORT/api/tts?text=%E9%93%B6&lang=yue&readings=ngan4" || true)
+    if [ -n "$UNIT" ]; then
+      ACTIVE_PID=$(systemctl show -p MainPID --value "$UNIT")
+    else
+      ACTIVE_PID=$(pgrep -f server-voice.py | head -1)
+    fi
+    "$PY" - "$ACTIVE_PID" "$PORT" "$APP_DIR" <<'PY' || fail "运行进程凭据或粤语音频验证失败"
+import os, sys, tempfile, urllib.request
+from pathlib import Path
+sys.path.insert(0, sys.argv[3])
+import voice_audio
+env = dict(item.split(b"=", 1) for item in Path(f"/proc/{sys.argv[1]}/environ").read_bytes().split(b"\0") if b"=" in item)
+for name in ("AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION"):
+    assert env.get(name.encode()) == os.environ[name].encode(), f"运行进程 {name} 未加载当前配置"
+with urllib.request.urlopen(f"http://127.0.0.1:{sys.argv[2]}/api/tts?text=%E9%93%B6&lang=yue&readings=ngan4", timeout=25) as response:
+    audio = response.read()
+    assert response.status == 200 and response.headers.get_content_type() == "audio/mpeg" and len(audio) > 500, "粤语响应不是有效音频"
+    assert response.headers.get("X-TTS-Version") == "2", "粤语音频版本错误"
+with tempfile.TemporaryDirectory(prefix="chazi-yue-verify-") as tmp:
+    path = Path(tmp) / "speech.mp3"
+    path.write_bytes(audio)
+    voice_audio.measure_loudness(path)
+print(f"[voice-deploy] 运行进程凭据一致，粤语音频解码通过: HTTP 200, {len(audio)} bytes", flush=True)
+PY
     log "健康检查通过: $RESP"
-    log "粤语朗读探测 HTTP $YUE（200 才算通；502=缺 /opt/chazi-voice/env，400=读法被上游拒）"
     log "当前进程: $(pgrep -af server-voice.py || echo 未找到)"
     log "部署完成 OK"
     exit 0
