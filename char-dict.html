@@ -52,6 +52,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #recStatusPill #pillTxt.recognizing{animation:recPulse 1.2s ease-in-out infinite;}
 @keyframes breath{0%,100%{box-shadow:0 8px 30px rgba(255,122,0,.3);}50%{box-shadow:0 8px 50px rgba(255,122,0,.5);}}
 #railBack{width:100%;font-size:18px;font-weight:700;border:2px solid #F0E0C8;border-radius:8px;padding:12px 8px;background:#fff;color:#2D2A26;box-shadow:0 2px 8px rgba(0,0,0,.04);min-height:56px;margin-top:8px;}
+#railBack[hidden]{display:block;visibility:hidden;pointer-events:none;}
 #historyBtn{width:100%;font-size:18px;font-weight:700;border:2px solid #F0E0C8;border-radius:8px;padding:12px 8px;background:#fff;color:#2D2A26;box-shadow:0 2px 8px rgba(0,0,0,.04);min-height:56px;}
 #historyBtn .n{font-size:clamp(14px,1.8vh,16px);color:#BB8C4F;font-weight:400;}
 #warnBanner{display:none;width:100%;max-width:560px;background:#FFF0E6;border:2px solid #FF8C42;color:#8a4b00;border-radius:8px;padding:12px;font-size:15px;line-height:1.5;text-align:center;}
@@ -81,6 +82,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 
 
 .mixed-detail-divider{flex-shrink:0;height:1px;margin:clamp(12px,2vh,22px) 0 0;background:#E6DCCF;}
+.sentence-meaning{flex-shrink:0;margin-top:12px;padding:12px 16px;border-radius:12px;background:#FFF3E0;font-size:20px;line-height:1.5;overflow-wrap:anywhere;max-height:30vh;overflow-y:auto;}
+.sentence-meaning[hidden]{display:none;}
+.sentence-meaning strong{display:block;font-size:15px;color:#8D6E63;margin-bottom:4px;}
 .mixed-detail-host{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:clamp(12px,1.8vh,20px) 0 0;}
 .mixed-detail-host.mixed-chinese-active:not([hidden]){display:flex;overflow:hidden;background:transparent;}
 .mixed-detail-host[hidden]{display:none;}
@@ -131,6 +135,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .word-card .readout-row{flex:1;min-height:44px;padding:2px 10px;gap:8px;border-radius:10px;font-size:clamp(15px,2vh,20px)}
 .word-card .readout-row.long{font-size:12.5px}
 .word-card .readout-row.long .ro-tag{font-size:11px}
+/* 字头和组词共用三列：标签、读法、喇叭；长读法只在内容列换行。 */
+:is(#detailYue,.word-card) .readout-row{text-align:left}
+:is(#detailYue,.word-card) .readout-row .ro-label{flex:1}
+:is(#detailYue,.word-card) .readout-row .ro-tag{flex-basis:3em;font-size:13px}
+:is(#detailYue,.word-card) .readout-row .ro-label>:last-child{flex:1;min-width:0;text-align:left;overflow-wrap:anywhere}
 #detailChar{font-size:280px;font-weight:400;line-height:1.5;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;max-width:100%;overflow:visible;white-space:nowrap;flex-shrink:0;}
 #detailChar.has-stroke-glyph{position:relative;display:block;width:1em;height:1.5em;}
 #detailChar .detail-glyph{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;}
@@ -191,7 +200,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   .res-speak{padding:clamp(8px,1.2vh,14px);font-size:clamp(16px,2.2vh,22px);max-width:260px;}
 }
 @media (min-width:900px) and (orientation:landscape){
-  #detailBody{display:grid;grid-template-columns:minmax(260px,31%) minmax(0,1fr);gap:16px;padding:12px 16px 20px;overflow:hidden;background:#fff;}
+  #detailBody{display:grid;grid-template-columns:minmax(260px,31%) minmax(0,1fr);gap:16px;padding:12px 16px 20px;overflow:hidden;background:transparent;}
   #detailBody .char-hero{min-width:0;min-height:0;padding:16px 24px 16px 0;border:0;border-right:1px solid #e5e7e8;border-radius:0;background:transparent;box-shadow:none;}
   #detailPinyin{font-size:56px;line-height:1.3;letter-spacing:0;color:#6c777c;}
   #detailBody .detail-learning{min-width:0;min-height:0;overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain;display:flex;flex-direction:column;gap:12px;padding:4px 2px 8px 0;}
@@ -282,28 +291,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 }
 @media (max-width:899px), (orientation:portrait){
   #app{flex-direction:column;}
-  #home{flex:0 0 auto;width:100%;display:grid;grid-template-columns:150px minmax(0,1fr);grid-template-rows:auto auto auto 1fr auto;align-items:center;column-gap:12px;row-gap:8px;padding:10px 12px;overflow:visible;}
-  #home .home-brand{grid-column:2;grid-row:1;justify-self:start;}
-  #home .language-mode{grid-column:2;grid-row:2;justify-self:start;}
-  #home #recBtn{grid-column:1;grid-row:1 / span 4;width:150px;height:150px;justify-self:center;}
-  #home #historyBtn{grid-column:2;grid-row:4;}
-  #home #asrSource{grid-column:2;grid-row:5;text-align:left;}
-  #home #warnBanner{grid-column:1 / -1;grid-row:6;}
+  #home{flex:0 0 auto;width:100%;display:grid;grid-template-columns:144px minmax(0,1fr) 88px;grid-template-rows:auto auto minmax(56px,auto);align-items:center;gap:8px 16px;padding:16px;overflow-y:auto;max-height:65dvh;border-bottom:1px solid #E5DCCF;}
+  #home .home-brand{grid-column:2 / -1;grid-row:1;justify-self:start;font-size:24px;letter-spacing:0;}
+  #home .home-brand .logo{width:40px;height:40px;font-size:24px;border-radius:12px;}
+  #home #recBtn{grid-column:1;grid-row:1 / span 3;width:144px;height:144px;justify-self:center;margin:0;gap:6px;}
+  #home #recBtn .mic{font-size:0;line-height:1;margin:0;}
+  #home #recBtn .mic svg{display:block;width:56px;height:56px;}
+  #home #recBtn .hint,#home #recBtn .rec-txt{font-size:16px;line-height:1.3;letter-spacing:0;max-width:80%;text-align:center;text-wrap:balance;overflow-wrap:anywhere;}
+  #home #historyBtn{grid-column:2;grid-row:3;min-width:0;font-size:17px;padding:8px;}
+  #home #railBack{grid-column:3;grid-row:3;margin:0;font-size:17px;padding:8px;}
+  #home #asrSource{grid-column:2 / -1;grid-row:4;text-align:left;}
+  #home #warnBanner{grid-column:1 / -1;grid-row:5;max-width:none;text-align:left;padding:12px;font-size:15px;line-height:1.5;}
+  #home #warnBanner .warning-content{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  #home #warnBanner button{margin:0;min-width:80px;flex-shrink:0;}
   #lookupWorkspace{flex:1;width:100%;}
   #lookupWorkspace > #results,#lookupWorkspace > #detail,#lookupWorkspace > #history,#lookupWorkspace > #englishLookupRoot{width:100%;}
   #lookupWorkspace #detailBody{overflow-y:auto;}
 }
 @media (max-width:600px){
-  #home{grid-template-columns:124px minmax(0,1fr);column-gap:10px;}
-  #home #recBtn{width:124px;height:124px;}
-  #home #recBtn .mic svg{width:56px;height:56px;}
-  #home #recBtn .hint{font-size:15px;letter-spacing:0;}
-  #home .home-brand{font-size:18px;letter-spacing:0;}
+  #home{grid-template-columns:112px minmax(0,1fr) 80px;grid-template-rows:auto auto minmax(56px,auto);padding:12px;gap:8px 10px;}
+  #home #recBtn{grid-row:1 / span 2;width:112px;height:112px;gap:4px;}
+  #home #recBtn .mic svg{width:44px;height:44px;}
+  #home #recBtn .hint,#home #recBtn .rec-txt{font-size:14px;}
+  #home #historyBtn{grid-column:1 / span 2;}
+  #home .home-brand{font-size:20px;}
   #lookupWorkspace .page-head{margin:4px 8px;}
 }
 #micStatus{order:3;min-height:20px;margin:0;text-align:center;font-size:13px;line-height:20px;color:#555;}
 #micStatus[data-state="ready"]{color:#237744;}
-@media (max-width:899px), (orientation:portrait){#home #micStatus{grid-column:2;grid-row:3;text-align:left;}}
+@media (max-width:899px), (orientation:portrait){#home #micStatus{grid-column:2 / -1;grid-row:2;text-align:left;overflow-wrap:anywhere;}}
 </style>
 
 </head>
@@ -321,7 +337,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   <button id="historyBtn">📖 查过的内容 <span class="n" id="histCount"></span></button>
   <button id="railBack" hidden>‹ 返回</button>
   <p id="asrSource"></p>
-  <div id="warnBanner">⚠️ 语音功能未就绪，请检查网络后重试。<button id="voiceRetry" type="button">重试</button></div>
+  <div id="warnBanner"><div class="warning-content"><span>⚠️ 语音功能未就绪，请检查网络后重试。</span><button id="voiceRetry" type="button">重试</button></div></div>
 </div>
 
 <main id="lookupWorkspace">
@@ -1959,6 +1975,10 @@ function englishBlockEl(result, query, contextPhrase){
       block.appendChild(extra);
     }
   }
+  if(!isWord && result && typeof result.translation === "string"){
+    var translation = document.createElement("div"); translation.className = "en-block-meanings";
+    translation.textContent = result.translation; block.appendChild(translation);
+  }
   return block;
 }
 function renderMixedEnglishDetail(result, query, contextPhrase){
@@ -1981,7 +2001,16 @@ function saveCombinedEnglishRecord(result, query){
 }
 function renderCombinedEnglishResult(result, query){
   var box = $("combinedEnglishResult"); if(!box) return;
-  if(box.classList.contains("mixed-inline-host")) return;
+  if(box.classList.contains("mixed-inline-host")){
+    var meaning = $("sentenceMeaning"); if(!meaning) return;
+    var text = result.kind === "sentence" ? result.translation : (result.meanings || []).map(function(item){ return item.translation; }).filter(Boolean).slice(0,3).join("；");
+    if(typeof text !== "string" || !text.trim()) throw new Error("英文解释为空");
+    meaning.hidden = false; meaning.textContent = "";
+    var title = document.createElement("strong"); title.textContent = result.kind === "sentence" && !/[\u4e00-\u9fff]/.test(resultsView.text) ? "整句意思" : "英文意思";
+    var content = document.createElement("div"); content.textContent = text;
+    meaning.appendChild(title); meaning.appendChild(content);
+    return;
+  }
   box.textContent = "";
   box.appendChild(englishBlockEl(result, query, ""));
 }
@@ -1993,6 +2022,8 @@ function loadCombinedEnglishResult(query, fromHistory){
     combinedEnglishSeq++;
     if(combinedEnglishController) combinedEnglishController.abort();
     combinedEnglishController = null;
+    var meaning = $("sentenceMeaning");
+    if(meaning){ meaning.hidden = false; meaning.textContent = "正在查英文意思…"; }
   }else{
     clearCombinedEnglishResult();
     box.hidden = false; box.classList.add("show");
@@ -2011,7 +2042,10 @@ function loadCombinedEnglishResult(query, fromHistory){
     .catch(function(error){
       if(seq !== combinedEnglishSeq || error.name === "AbortError") return;
       combinedEnglishController = null;
-      if(!mixedInline){
+      if(mixedInline){
+        var meaning = $("sentenceMeaning");
+        if(meaning){ meaning.hidden = false; meaning.textContent = "英文解释暂时没出来，仍可点单词查看。"; }
+      }else{
         box.textContent = "";
         var errorNode = document.createElement("div"); errorNode.className = "combined-english-error"; errorNode.textContent = "英文解释暂时没出来，原句仍然保留。"; box.appendChild(errorNode);
       }
@@ -2028,7 +2062,7 @@ function showCombinedSentenceMode(text, fromHistory){
   var chars = $("resultChars"); chars.innerHTML = ""; chars.style.display = "none";
   var box = $("combinedEnglishResult");
   box.hidden = false; box.classList.add("show", "mixed-inline-host");
-  box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-sentence-line"><div class="mixed-token-row" id="mixedTokenRow"></div></div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
+  box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-sentence-line"><div class="mixed-token-row" id="mixedTokenRow"></div></div><div class="sentence-meaning" id="sentenceMeaning" role="status" hidden></div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
   showWorkspace("results");
   renderMixedSentenceTokens(text, $("mixedTokenRow"));
   var sentenceRows = sentenceReadoutEl(text);
