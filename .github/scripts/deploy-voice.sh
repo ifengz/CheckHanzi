@@ -131,6 +131,22 @@ for name in voice_audio.py english_lookup.py server-voice.py; do
   mv "$RELEASE_DIR/$name" "$APP_DIR/$name" || fail "后端安装失败: $name"
 done
 
+# ---- 2.9) 粤语朗读凭据：EnvironmentFile 挂到 unit（值由 Actions 那侧经 stdin 写入，不进命令行）----
+ENV_FILE="$APP_DIR/env"
+if [ -n "$UNIT" ] && [ -f "$ENV_FILE" ]; then
+  UPATH=$(systemctl show -p FragmentPath --value "$UNIT" 2>/dev/null)
+  if [ -n "$UPATH" ] && [ -f "$UPATH" ] && ! grep -q "^EnvironmentFile=$ENV_FILE" "$UPATH"; then
+    log "给 $UPATH 挂 EnvironmentFile=$ENV_FILE"
+    cp "$UPATH" "$UPATH.bak-env"
+    sed -i "/^\[Service\]/a EnvironmentFile=$ENV_FILE" "$UPATH"
+    systemctl daemon-reload
+  elif [ -n "$UPATH" ]; then
+    log "EnvironmentFile 已挂或 unit 无 [Service] 段，跳过"
+  fi
+elif [ ! -f "$ENV_FILE" ]; then
+  log "缺 $ENV_FILE：粤语朗读会继续报 502（在 Actions 里加 AZURE_SPEECH_KEY secret 即可自动写入）"
+fi
+
 # ---- 3) 重启 ----
 if [ -n "$UNIT" ]; then
   log "systemd 重启: $UNIT"
@@ -142,6 +158,7 @@ elif [ -n "$PID" ]; then
   sleep 1
   cd "$APP_DIR"
   while IFS= read -r kv; do case "$kv" in *=*) export "$kv" ;; esac; done < /tmp/voice_env.$$
+  if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
   rm -f /tmp/voice_env.$$
   nohup "$PY" server-voice.py >> "$APP_DIR/voice.log" 2>&1 &
 else
@@ -156,7 +173,9 @@ for i in $(seq 1 20); do
   if printf '%s' "$RESP" | "$PY" -c 'import json,sys; assert json.load(sys.stdin).get("ok") is True' 2>/dev/null; then
     ENGLISH=$(curl -s --max-time 5 -H 'Content-Type: application/json' --data '{"text":"apple"}' "http://127.0.0.1:$PORT/api/english" || true)
     printf '%s' "$ENGLISH" | "$PY" -c 'import json,sys; result=json.load(sys.stdin); assert result.get("kind") == "word" and result.get("word") == "apple" and result.get("meanings")' || fail "英文单词线上查询验证失败"
+    YUE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "http://127.0.0.1:$PORT/api/tts?text=%E9%93%B6&lang=yue&readings=ngan4" || true)
     log "健康检查通过: $RESP"
+    log "粤语朗读探测 HTTP $YUE（200 才算通；502=缺 /opt/chazi-voice/env，400=读法被上游拒）"
     log "当前进程: $(pgrep -af server-voice.py || echo 未找到)"
     log "部署完成 OK"
     exit 0

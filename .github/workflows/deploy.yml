@@ -34,12 +34,22 @@ jobs:
           SSH_USER: ${{ secrets.DEPLOY_USER }}
           SSH_PORT: ${{ secrets.DEPLOY_PORT }}
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/voice_deploy_key
           chmod 600 ~/.ssh/voice_deploy_key
           SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/voice_deploy_key -p ${SSH_PORT:-22}"
           $SSH "$SSH_USER@$SSH_HOST" "mkdir -p /opt/chazi-voice/incoming"
+          # 粤语朗读凭据：值经 stdin 送进服务器写成 600 文件，不进命令行也不进日志
+          if [ -n "${AZURE_SPEECH_KEY:-}" ]; then
+            printf 'AZURE_SPEECH_KEY=%s\nAZURE_SPEECH_REGION=%s\n' "$AZURE_SPEECH_KEY" "${AZURE_SPEECH_REGION:-eastasia}" \
+              | $SSH "$SSH_USER@$SSH_HOST" "umask 077; mkdir -p /opt/chazi-voice; cat > /opt/chazi-voice/env"
+            echo "[deploy] 已写入 /opt/chazi-voice/env（600）"
+          else
+            echo "[deploy] 未配置 AZURE_SPEECH_KEY secret：跳过，粤语朗读会继续 502"
+          fi
           tar -cf - server-voice.py voice_audio.py english_lookup.py data/english/ecdict.sqlite3.gz data/english/ECDICT-LICENSE.txt data/english/manifest.json .github/scripts/check-english.py | $SSH "$SSH_USER@$SSH_HOST" "tar -xf - -C /opt/chazi-voice/incoming"
           $SSH "$SSH_USER@$SSH_HOST" "bash -s" < .github/scripts/deploy-voice.sh
 
