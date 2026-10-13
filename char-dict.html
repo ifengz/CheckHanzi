@@ -82,6 +82,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 
 
 .mixed-detail-divider{flex-shrink:0;height:1px;margin:clamp(12px,2vh,22px) 0 0;background:#E6DCCF;}
+.sentence-meaning{flex-shrink:0;margin-top:12px;padding:12px 16px;border-radius:12px;background:#FFF3E0;font-size:20px;line-height:1.5;overflow-wrap:anywhere;max-height:30vh;overflow-y:auto;}
+.sentence-meaning[hidden]{display:none;}
+.sentence-meaning strong{display:block;font-size:15px;color:#8D6E63;margin-bottom:4px;}
 .mixed-detail-host{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:clamp(12px,1.8vh,20px) 0 0;}
 .mixed-detail-host.mixed-chinese-active:not([hidden]){display:flex;overflow:hidden;background:transparent;}
 .mixed-detail-host[hidden]{display:none;}
@@ -288,28 +291,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 }
 @media (max-width:899px), (orientation:portrait){
   #app{flex-direction:column;}
-  #home{flex:0 0 auto;width:100%;display:grid;grid-template-columns:150px minmax(0,1fr);grid-template-rows:auto auto auto 1fr auto;align-items:center;column-gap:12px;row-gap:8px;padding:10px 12px;overflow:visible;}
-  #home .home-brand{grid-column:2;grid-row:1;justify-self:start;}
-  #home .language-mode{grid-column:2;grid-row:2;justify-self:start;}
-  #home #recBtn{grid-column:1;grid-row:1 / span 4;width:150px;height:150px;justify-self:center;}
-  #home #historyBtn{grid-column:2;grid-row:4;}
-  #home #asrSource{grid-column:2;grid-row:5;text-align:left;}
-  #home #warnBanner{grid-column:1 / -1;grid-row:6;}
+  #home{flex:0 0 auto;width:100%;display:grid;grid-template-columns:144px minmax(0,1fr) 88px;grid-template-rows:auto auto minmax(56px,auto);align-items:center;gap:8px 16px;padding:16px;overflow-y:auto;max-height:65dvh;border-bottom:1px solid #E5DCCF;}
+  #home .home-brand{grid-column:2 / -1;grid-row:1;justify-self:start;font-size:24px;letter-spacing:0;}
+  #home .home-brand .logo{width:40px;height:40px;font-size:24px;border-radius:12px;}
+  #home #recBtn{grid-column:1;grid-row:1 / span 3;width:144px;height:144px;justify-self:center;margin:0;gap:6px;}
+  #home #recBtn .mic{font-size:0;line-height:1;margin:0;}
+  #home #recBtn .mic svg{display:block;width:56px;height:56px;}
+  #home #recBtn .hint,#home #recBtn .rec-txt{font-size:16px;line-height:1.3;letter-spacing:0;max-width:80%;text-align:center;text-wrap:balance;overflow-wrap:anywhere;}
+  #home #historyBtn{grid-column:2;grid-row:3;min-width:0;font-size:17px;padding:8px;}
+  #home #railBack{grid-column:3;grid-row:3;margin:0;font-size:17px;padding:8px;}
+  #home #asrSource{grid-column:2 / -1;grid-row:4;text-align:left;}
+  #home #warnBanner{grid-column:1 / -1;grid-row:5;max-width:none;text-align:left;padding:12px;font-size:15px;line-height:1.5;}
+  #home #warnBanner .warning-content{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  #home #warnBanner button{margin:0;min-width:80px;flex-shrink:0;}
   #lookupWorkspace{flex:1;width:100%;}
   #lookupWorkspace > #results,#lookupWorkspace > #detail,#lookupWorkspace > #history,#lookupWorkspace > #englishLookupRoot{width:100%;}
   #lookupWorkspace #detailBody{overflow-y:auto;}
 }
 @media (max-width:600px){
-  #home{grid-template-columns:124px minmax(0,1fr);column-gap:10px;}
-  #home #recBtn{width:124px;height:124px;}
-  #home #recBtn .mic svg{width:56px;height:56px;}
-  #home #recBtn .hint{font-size:15px;letter-spacing:0;}
-  #home .home-brand{font-size:18px;letter-spacing:0;}
+  #home{grid-template-columns:112px minmax(0,1fr) 80px;grid-template-rows:auto auto minmax(56px,auto);padding:12px;gap:8px 10px;}
+  #home #recBtn{grid-row:1 / span 2;width:112px;height:112px;gap:4px;}
+  #home #recBtn .mic svg{width:44px;height:44px;}
+  #home #recBtn .hint,#home #recBtn .rec-txt{font-size:14px;}
+  #home #historyBtn{grid-column:1 / span 2;}
+  #home .home-brand{font-size:20px;}
   #lookupWorkspace .page-head{margin:4px 8px;}
 }
 #micStatus{order:3;min-height:20px;margin:0;text-align:center;font-size:13px;line-height:20px;color:#555;}
 #micStatus[data-state="ready"]{color:#237744;}
-@media (max-width:899px), (orientation:portrait){#home #micStatus{grid-column:2;grid-row:3;text-align:left;}}
+@media (max-width:899px), (orientation:portrait){#home #micStatus{grid-column:2 / -1;grid-row:2;text-align:left;overflow-wrap:anywhere;}}
 </style>
 
 </head>
@@ -327,7 +337,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   <button id="historyBtn">📖 查过的内容 <span class="n" id="histCount"></span></button>
   <button id="railBack" hidden>‹ 返回</button>
   <p id="asrSource"></p>
-  <div id="warnBanner">⚠️ 语音功能未就绪，请检查网络后重试。<button id="voiceRetry" type="button">重试</button></div>
+  <div id="warnBanner"><div class="warning-content"><span>⚠️ 语音功能未就绪，请检查网络后重试。</span><button id="voiceRetry" type="button">重试</button></div></div>
 </div>
 
 <main id="lookupWorkspace">
@@ -1965,6 +1975,10 @@ function englishBlockEl(result, query, contextPhrase){
       block.appendChild(extra);
     }
   }
+  if(!isWord && result && typeof result.translation === "string"){
+    var translation = document.createElement("div"); translation.className = "en-block-meanings";
+    translation.textContent = result.translation; block.appendChild(translation);
+  }
   return block;
 }
 function renderMixedEnglishDetail(result, query, contextPhrase){
@@ -1987,7 +2001,16 @@ function saveCombinedEnglishRecord(result, query){
 }
 function renderCombinedEnglishResult(result, query){
   var box = $("combinedEnglishResult"); if(!box) return;
-  if(box.classList.contains("mixed-inline-host")) return;
+  if(box.classList.contains("mixed-inline-host")){
+    var meaning = $("sentenceMeaning"); if(!meaning) return;
+    var text = result.kind === "sentence" ? result.translation : (result.meanings || []).map(function(item){ return item.translation; }).filter(Boolean).slice(0,3).join("；");
+    if(typeof text !== "string" || !text.trim()) throw new Error("英文解释为空");
+    meaning.hidden = false; meaning.textContent = "";
+    var title = document.createElement("strong"); title.textContent = result.kind === "sentence" && !/[\u4e00-\u9fff]/.test(resultsView.text) ? "整句意思" : "英文意思";
+    var content = document.createElement("div"); content.textContent = text;
+    meaning.appendChild(title); meaning.appendChild(content);
+    return;
+  }
   box.textContent = "";
   box.appendChild(englishBlockEl(result, query, ""));
 }
@@ -1999,6 +2022,8 @@ function loadCombinedEnglishResult(query, fromHistory){
     combinedEnglishSeq++;
     if(combinedEnglishController) combinedEnglishController.abort();
     combinedEnglishController = null;
+    var meaning = $("sentenceMeaning");
+    if(meaning){ meaning.hidden = false; meaning.textContent = "正在查英文意思…"; }
   }else{
     clearCombinedEnglishResult();
     box.hidden = false; box.classList.add("show");
@@ -2017,7 +2042,10 @@ function loadCombinedEnglishResult(query, fromHistory){
     .catch(function(error){
       if(seq !== combinedEnglishSeq || error.name === "AbortError") return;
       combinedEnglishController = null;
-      if(!mixedInline){
+      if(mixedInline){
+        var meaning = $("sentenceMeaning");
+        if(meaning){ meaning.hidden = false; meaning.textContent = "英文解释暂时没出来，仍可点单词查看。"; }
+      }else{
         box.textContent = "";
         var errorNode = document.createElement("div"); errorNode.className = "combined-english-error"; errorNode.textContent = "英文解释暂时没出来，原句仍然保留。"; box.appendChild(errorNode);
       }
@@ -2034,7 +2062,7 @@ function showCombinedSentenceMode(text, fromHistory){
   var chars = $("resultChars"); chars.innerHTML = ""; chars.style.display = "none";
   var box = $("combinedEnglishResult");
   box.hidden = false; box.classList.add("show", "mixed-inline-host");
-  box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-sentence-line"><div class="mixed-token-row" id="mixedTokenRow"></div></div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
+  box.innerHTML = '<div class="mixed-inline-result"><div class="mixed-sentence-line"><div class="mixed-token-row" id="mixedTokenRow"></div></div><div class="sentence-meaning" id="sentenceMeaning" role="status" hidden></div><div class="mixed-detail-divider"></div><div class="mixed-detail-host" id="mixedDetailHost" hidden></div></div>';
   showWorkspace("results");
   renderMixedSentenceTokens(text, $("mixedTokenRow"));
   var sentenceRows = sentenceReadoutEl(text);

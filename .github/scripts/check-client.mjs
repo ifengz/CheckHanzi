@@ -1103,7 +1103,20 @@ const codedLabels = [];
 const collectCoded = node => { if(String(node.className).split(/\s+/).includes("readout-row")) codedLabels.push(flatten(node).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()); node.children.forEach(collectCoded); };
 collectCoded(coded);
 assert.deepEqual(codedLabels, ["英文 have", "正在做 having", "过去式 had", "他/她/它 has"], 'each word form must carry a plain-Chinese note a child can read');
-enContext.englishBlockEl({ kind: "sentence", translation: "苹果汁" }, "apple juice");
+assert.ok(flatten(enContext.englishBlockEl({ kind: "sentence", translation: "苹果汁" }, "apple juice")).includes("苹果汁"), "sentence blocks must display the returned translation");
+const sentenceMeaning = new TestNode("div");
+const sentenceBox = new TestNode("div"); sentenceBox.classList.add("mixed-inline-host");
+const wordDetail = new TestNode("div"); wordDetail.textContent = "已有单词解释";
+const sentenceContext = vm.createContext({
+  $: id => ({combinedEnglishResult:sentenceBox, sentenceMeaning, mixedDetailHost:wordDetail})[id],
+  document: enContext.document,
+  resultsView: {text:"I like apples."},
+});
+vm.runInContext(html.slice(html.indexOf("function renderCombinedEnglishResult("), html.indexOf("function loadCombinedEnglishResult(")), sentenceContext);
+sentenceContext.renderCombinedEnglishResult({kind:"sentence",translation:"我喜欢苹果。"}, "I like apples.");
+assert.ok(flatten(sentenceMeaning).includes("我喜欢苹果。"), "inline sentence mode must show the whole translation");
+assert.equal(wordDetail.textContent, "已有单词解释", "a delayed sentence response must preserve the selected word detail");
+assert.throws(() => sentenceContext.renderCombinedEnglishResult({kind:"sentence",translation:""}, "I like apples."), /英文解释为空/, "empty translations must surface as errors");
 assert.ok(enSpoken.length === 0, "building the block must not start audio");
 assert.equal(typeof createEnglishLookup, 'function', 'English lookup factory must register');
 const englishController = createEnglishLookup({
