@@ -52,6 +52,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #recStatusPill #pillTxt.recognizing{animation:recPulse 1.2s ease-in-out infinite;}
 @keyframes breath{0%,100%{box-shadow:0 8px 30px rgba(255,122,0,.3);}50%{box-shadow:0 8px 50px rgba(255,122,0,.5);}}
 #railBack{width:100%;font-size:18px;font-weight:700;border:2px solid #F0E0C8;border-radius:8px;padding:12px 8px;background:#fff;color:#2D2A26;box-shadow:0 2px 8px rgba(0,0,0,.04);min-height:56px;margin-top:8px;}
+#railBack[hidden]{display:block;visibility:hidden;pointer-events:none;}
 #historyBtn{width:100%;font-size:18px;font-weight:700;border:2px solid #F0E0C8;border-radius:8px;padding:12px 8px;background:#fff;color:#2D2A26;box-shadow:0 2px 8px rgba(0,0,0,.04);min-height:56px;}
 #historyBtn .n{font-size:clamp(14px,1.8vh,16px);color:#BB8C4F;font-weight:400;}
 #warnBanner{display:none;width:100%;max-width:560px;background:#FFF0E6;border:2px solid #FF8C42;color:#8a4b00;border-radius:8px;padding:12px;font-size:15px;line-height:1.5;text-align:center;}
@@ -131,6 +132,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .word-card .readout-row{flex:1;min-height:44px;padding:2px 10px;gap:8px;border-radius:10px;font-size:clamp(15px,2vh,20px)}
 .word-card .readout-row.long{font-size:12.5px}
 .word-card .readout-row.long .ro-tag{font-size:11px}
+/* 字头和组词共用三列：标签、读法、喇叭；长读法只在内容列换行。 */
+:is(#detailYue,.word-card) .readout-row{text-align:left}
+:is(#detailYue,.word-card) .readout-row .ro-label{flex:1}
+:is(#detailYue,.word-card) .readout-row .ro-tag{flex-basis:3em;font-size:13px}
+:is(#detailYue,.word-card) .readout-row .ro-label>:last-child{flex:1;min-width:0;text-align:left;overflow-wrap:anywhere}
 #detailChar{font-size:280px;font-weight:400;line-height:1.5;cursor:pointer;transition:transform .15s;font-family:"Kaiti SC",STKaiti,"Songti SC","Noto Serif SC",serif;max-width:100%;overflow:visible;white-space:nowrap;flex-shrink:0;}
 #detailChar.has-stroke-glyph{position:relative;display:block;width:1em;height:1.5em;}
 #detailChar .detail-glyph{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;}
@@ -191,7 +197,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   .res-speak{padding:clamp(8px,1.2vh,14px);font-size:clamp(16px,2.2vh,22px);max-width:260px;}
 }
 @media (min-width:900px) and (orientation:landscape){
-  #detailBody{display:grid;grid-template-columns:minmax(260px,31%) minmax(0,1fr);gap:16px;padding:12px 16px 20px;overflow:hidden;background:#fff;}
+  #detailBody{display:grid;grid-template-columns:minmax(260px,31%) minmax(0,1fr);gap:16px;padding:12px 16px 20px;overflow:hidden;background:transparent;}
   #detailBody .char-hero{min-width:0;min-height:0;padding:16px 24px 16px 0;border:0;border-right:1px solid #e5e7e8;border-radius:0;background:transparent;box-shadow:none;}
   #detailPinyin{font-size:56px;line-height:1.3;letter-spacing:0;color:#6c777c;}
   #detailBody .detail-learning{min-width:0;min-height:0;overflow-y:auto;scrollbar-gutter:stable;overscroll-behavior:contain;display:flex;flex-direction:column;gap:12px;padding:4px 2px 8px 0;}
