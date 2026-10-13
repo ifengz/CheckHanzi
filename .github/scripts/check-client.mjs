@@ -1456,4 +1456,16 @@ for (const W of [320, 423, 706, 997, 1304, 1764, 2224, 3000]) {
     if (n >= 8) assert.ok(perRow >= 4, `stroke cells waste the row at width ${W}: only ${perRow} fit (${size}px)`);
   }
 }
+// 读法条防压图标 + 顶栏挪进左栏
+const rowRule = (html.match(/\.readout-row\{[^}]*\}/) || [''])[0];
+assert.ok(rowRule, '找不到 .readout-row 规则');
+assert.ok(!/white-space:nowrap/.test(rowRule), '.readout-row 不许再写死 white-space:nowrap，长读法会压到喇叭图标');
+assert.ok(/width:auto/.test(rowRule) && /max-width:100%/.test(rowRule), '.readout-row 必须贴内容成胶囊（width:auto + max-width:100%），否则文字与喇叭之间会出现被拉伸的空档');
+assert.ok(/flex:0 0 auto/.test((html.match(/\.readout-row svg\{[^}]*\}/) || [''])[0]), '.readout-row svg 必须 flex:0 0 auto，喇叭不能被文字挤走');
+const headRule = (html.match(/^\.page-head\{[^}]*\}/m) || [''])[0];
+assert.ok(/display:none/.test(headRule), '顶栏 .page-head 应整条隐藏：返回已挪进左栏，查过的内容左栏本来就有');
+assert.ok(/<button id="railBack"[^>]*>‹ 返回<\/button>/.test(html), '左栏必须有 #railBack 返回按钮');
+assert.ok(/function wireRailBack\(\)/.test(html) && /railBack\.hidden = !\(page === "results" \|\| page === "detail"\)/.test(html), '#railBack 必须按当前页显示并转发到该页的返回逻辑');
+assert.ok(/#railBack\{[^}]*min-height:56px/.test(html), '左栏返回按钮必须保持 56px 可点高度');
+
 console.log('Client syntax, audio resampling, umlaut pinyin, and stroke grid checks passed');
