@@ -51,6 +51,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #recStatusPill .pill-wave i{width:7px;border-radius:4px;background:#FF9D3C;height:10px;}
 #recStatusPill #pillTxt.recognizing{animation:recPulse 1.2s ease-in-out infinite;}
 @keyframes breath{0%,100%{box-shadow:0 8px 30px rgba(255,122,0,.3);}50%{box-shadow:0 8px 50px rgba(255,122,0,.5);}}
+#railBack{width:100%;font-size:18px;font-weight:700;border:2px solid #F0E0C8;border-radius:8px;padding:12px 8px;background:#fff;color:#2D2A26;box-shadow:0 2px 8px rgba(0,0,0,.04);min-height:56px;margin-top:8px;}
 #historyBtn{width:100%;font-size:18px;font-weight:700;border:2px solid #F0E0C8;border-radius:8px;padding:12px 8px;background:#fff;color:#2D2A26;box-shadow:0 2px 8px rgba(0,0,0,.04);min-height:56px;}
 #historyBtn .n{font-size:clamp(14px,1.8vh,16px);color:#BB8C4F;font-weight:400;}
 #warnBanner{display:none;width:100%;max-width:560px;background:#FFF0E6;border:2px solid #FF8C42;color:#8a4b00;border-radius:8px;padding:12px;font-size:15px;line-height:1.5;text-align:center;}
@@ -97,13 +98,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #detailPinyin{font-size:56px;line-height:1.3;color:#BB8C4F;font-weight:700;letter-spacing:0;margin-bottom:clamp(1px,.3vh,6px);flex-shrink:0;}
 #detailYue{width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;margin-bottom:clamp(1px,.3vh,6px);}
 .rows{display:inline-flex;flex-direction:column;gap:6px;max-width:100%;min-width:0}
-.readout-row{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:48px;white-space:nowrap;padding:4px 12px;border:2px solid #9CC6BD;border-radius:14px;background:#F2FAF8;color:#216C76;font-weight:700;font-family:inherit;line-height:1.2;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.readout-row{display:flex;align-items:center;justify-content:center;gap:10px;width:auto;max-width:100%;min-height:48px;white-space:normal;padding:4px 12px;border:2px solid #9CC6BD;border-radius:14px;background:#F2FAF8;color:#216C76;font-weight:700;font-family:inherit;line-height:1.2;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 .readout-row:active{transform:scale(.97);background:#DFF1EC;}
 .readout-row.loading{outline:3px solid #528BBF;outline-offset:2px;background:#E7F1FC;}
 .readout-row.playing{border-color:#FF9D3C;background:#FFE9D2;color:#C65E00;}
-.readout-row .ro-label{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+.readout-row .ro-label{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:10px}
 .readout-row .ro-tag{font-size:13px;color:#7E9A98;font-weight:700;flex:0 0 46px;text-align:left}
-.readout-row svg{width:20px;height:20px;flex-shrink:0}
+.readout-row svg{width:20px;height:20px;flex:0 0 auto;flex-shrink:0}
 .mixed-sentence-line{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;flex-shrink:0}
 .sentence-rows{margin:6px 0 0;flex-direction:row;justify-content:center;gap:8px;max-width:none;width:auto}
 .mixed-sentence-line .sentence-rows{margin:0;flex:0 0 auto}
@@ -165,7 +166,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 .spk svg{width:1em;height:1em}
 .mini-spk{display:none;}
 /* 历史页 */
-.page-head{display:flex;align-items:center;justify-content:space-between;padding:clamp(6px,.8vh,12px) clamp(10px,2vw,16px);min-height:clamp(44px,6vh,60px);flex-shrink:0;margin:clamp(4px,.6vh,8px) clamp(6px,1.2vw,12px);background:#FFFAF5;border-radius:clamp(14px,2vh,24px);box-shadow:0 2px 8px rgba(0,0,0,.04);}
+.page-head{display:none;align-items:center;justify-content:space-between;padding:clamp(6px,.8vh,12px) clamp(10px,2vw,16px);min-height:clamp(44px,6vh,60px);flex-shrink:0;margin:clamp(4px,.6vh,8px) clamp(6px,1.2vw,12px);background:#FFFAF5;border-radius:clamp(14px,2vh,24px);box-shadow:0 2px 8px rgba(0,0,0,.04);}
+#history>.page-head{display:flex;}
 .page-head button{font-size:clamp(16px,2.2vh,20px);border:0;border-radius:18px;padding:clamp(8px,1.5vh,12px) clamp(14px,2vw,22px);font-weight:700;background:#FFEED6;color:#2D2A26;min-height:clamp(40px,5vh,52px);}
 .page-head .head-actions{display:flex;align-items:center;gap:clamp(4px,.8vh,8px);}
 .page-head button.head-mic{background:linear-gradient(135deg,#FF7A00,#FF9D3C);color:#fff;touch-action:none;-webkit-user-select:none;user-select:none;box-shadow:0 4px 14px rgba(255,122,0,.3);}
@@ -317,6 +319,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   <button id="recBtn" aria-label="按住说话查字"><span class="mic" data-lucide="mic"></span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-dots"><i></i><i></i><i></i></span><span class="rec-txt">松开 查字</span></span></button>
   <p id="micStatus" role="status" aria-live="polite" data-state="idle">正在检查麦克风…</p>
   <button id="historyBtn">📖 查过的内容 <span class="n" id="histCount"></span></button>
+  <button id="railBack" hidden>‹ 返回</button>
   <p id="asrSource"></p>
   <div id="warnBanner">⚠️ 语音功能未就绪，请检查网络后重试。<button id="voiceRetry" type="button">重试</button></div>
 </div>
@@ -1026,6 +1029,14 @@ function recordLookup(){
   lookupCount += 1;
   renderLookupCounter();
 }
+function wireRailBack(){
+  var btn = $("railBack"); if(!btn || btn.dataset.wired) return;
+  btn.dataset.wired = "1";
+  btn.addEventListener("click", function(){
+    var target = $("detail").classList.contains("show") ? $("backBtn") : $("resBack");
+    if(target) target.click();
+  });
+}
 function showWorkspace(page){
   ["results","detail","history"].forEach(function(name){
     var panel = $(name);
@@ -1034,6 +1045,9 @@ function showWorkspace(page){
   var english = $("englishLookupRoot");
   if(english) english.hidden = page !== "english";
   renderLookupCounter(page === "results" || page === "detail" || page === "english");
+  wireRailBack();
+  var railBack = $("railBack");
+  if(railBack) railBack.hidden = !(page === "results" || page === "detail");
 }
 function showResultsPage(chars, toneNum, fromHistory, preserveAll){
   cancelSpeech();
