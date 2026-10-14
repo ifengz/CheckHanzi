@@ -96,7 +96,7 @@ if ! "$PY" -c "import importlib.metadata; assert importlib.metadata.version('ima
   "$PY" -m pip install 'imageio-ffmpeg==0.6.0' || fail "FFmpeg 依赖安装失败"
 fi
 "$PY" -c "import os, subprocess, imageio_ffmpeg; binary = os.environ.get('FFMPEG_BIN') or imageio_ffmpeg.get_ffmpeg_exe(); result = subprocess.run([binary, '-hide_banner', '-filters'], capture_output=True, text=True, check=True, timeout=10); assert 'loudnorm' in result.stdout" || fail "FFmpeg loudnorm 校验失败"
-log "依赖就绪 ✓"
+log "依赖就绪"
 
 # 若切换到了专用 venv 且是 systemd 托管：改 unit 的 ExecStart 指向 venv python（保留 Environment 等）
 if [ "$NEED_UNIT_PATCH" = "1" ] && [ -n "$UNIT" ]; then

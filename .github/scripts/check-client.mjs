@@ -14,8 +14,6 @@ const englishScript = readFileSync(resolve(root, 'english-lookup.js'), 'utf8');
 for (const [name, source] of [['english-lookup.js', englishScript], ['lucide-icons.js', readFileSync(resolve(root, 'lucide-icons.js'), 'utf8')]]) {
   new vm.Script(source, { filename:name });
 }
-assert.doesNotMatch(html, /<input\b/i, 'voice-only lookup must not retain an input element');
-assert.doesNotMatch(englishScript, /config\.input|english-submit|searchInput/, 'English lookup must not depend on typed entry');
 assert.match(html, /#recBtn\{[^}]*touch-action:none/, 'record button must reserve touch gestures for recording');
 assert.match(html, /id="lookupCounter"/, 'lookup results must expose the unobtrusive lookup counter');
 assert.match(html, /#lookupCounter\{[^}]*position:fixed[^}]*right:[^}]*bottom:/, 'lookup counter must stay in the lower-right corner');
@@ -1478,7 +1476,7 @@ assert.ok(/flex:0 0 auto/.test((html.match(/\.readout-row svg\{[^}]*\}/) || ['']
 const headRule = (html.match(/^\.page-head\{[^}]*\}/m) || [''])[0];
 assert.ok(/display:none/.test(headRule), '顶栏 .page-head 应整条隐藏：返回已挪进左栏，查过的内容左栏本来就有');
 assert.ok(/<button id="railBack"[^>]*>‹ 返回<\/button>/.test(html), '左栏必须有 #railBack 返回按钮');
-assert.ok(/function wireRailBack\(\)/.test(html) && /railBack\.hidden = !\(page === "results" \|\| page === "detail"\)/.test(html), '#railBack 必须按当前页显示并转发到该页的返回逻辑');
+assert.ok(/function wireRailBack\(\)/.test(html) && /railBack\.hidden = !\(page === "results" \|\| page === "detail" \|\| page === "english"\)/.test(html), '#railBack 必须按当前页显示并转发到该页的返回逻辑');
 assert.ok(/#railBack\{[^}]*min-height:56px/.test(html), '左栏返回按钮必须保持 56px 可点高度');
 
 console.log('Client syntax, audio resampling, umlaut pinyin, and stroke grid checks passed');

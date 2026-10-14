@@ -51,6 +51,7 @@
 
     function clear(){
       abortPending();
+      if(config.cancelInput) config.cancelInput();
       config.cancelSpeech();
       state.lastQuery = "";
       state.sentence = null;
@@ -152,8 +153,50 @@
         list.appendChild(more);
       }
       resultBox.appendChild(list);
+      renderLearning(result.word, list);
       var source = sourceLine(result.source);
       if(source) resultBox.appendChild(source);
+    }
+
+    function renderLearning(word, meanings){
+      if(!window.EnglishInput) return;
+      var seq = state.seq;
+      var box = node("div", "english-learning");
+      box.appendChild(node("p", "english-learning-status", "正在找简单例句…"));
+      resultBox.appendChild(box);
+      window.EnglishInput.loadLearning().then(function(data){
+        if(seq !== state.seq || !box.parentNode) return;
+        var entry = window.EnglishInput.learningForWord(word, data);
+        box.textContent = "";
+        if(!entry){
+          box.appendChild(node("p", "english-learning-status", "这个词的简单例句还没收录"));
+          return;
+        }
+        meanings.textContent = "";
+        var primary = node("div", "english-meaning english-meaning-primary", entry.meaning);
+        meanings.appendChild(primary);
+        var details = node("details", "english-more");
+        details.appendChild(node("summary", "english-more-summary", "词典里的其他解释"));
+        var original = Array.isArray(state.result && state.result.meanings) ? state.result.meanings : [];
+        original.forEach(function(item){
+          if(item && typeof item.translation === "string") details.appendChild(node("div", "english-meaning", item.translation));
+        });
+        if(original.length) meanings.appendChild(details);
+        var head = node("div", "english-example-head");
+        head.appendChild(node("h3", "english-example-title", "看个例句"));
+        head.appendChild(speakButton(entry.example));
+        box.appendChild(head);
+        box.appendChild(node("div", "english-example-text", entry.example));
+        box.appendChild(node("div", "english-example-translation", entry.translation));
+        box.appendChild(node("p", "english-learning-status", "例句：查字宝编写"));
+      }).catch(function(error){
+        if(seq !== state.seq || !box.parentNode) return;
+        box.textContent = "";
+        box.appendChild(node("p", "english-learning-status", error.message || "例句暂时加载不了"));
+        var retry = buttonWithIcon(config, "english-retry", "rotate-ccw", "重试例句");
+        retry.addEventListener("click", function(){ box.remove(); renderLearning(word, meanings); });
+        box.appendChild(retry);
+      });
     }
 
     function sentenceTokens(text){
@@ -305,6 +348,7 @@
 
     function cancelPending(){
       abortPending();
+      if(config.cancelInput) config.cancelInput();
       config.cancelSpeech();
       status.textContent = "";
     }

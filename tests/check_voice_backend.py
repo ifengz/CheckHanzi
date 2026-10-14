@@ -219,6 +219,43 @@ class VoiceBackendContractTest(unittest.TestCase):
         response = server_voice.app.test_client().get("/api/tts?text=apple&lang=fr")
         self.assertEqual(response.status_code, 400)
 
+    def test_english_tts_retries_azure_when_edge_is_unavailable(self):
+        async def edge_unavailable(_text, _lang):
+            raise RuntimeError("edge-tts HTTP 403")
+
+        with patch.dict(os.environ, {
+            "AZURE_SPEECH_KEY": "test-key",
+            "AZURE_SPEECH_REGION": "eastasia",
+        }), patch.object(server_voice, "edge_tts_generate", side_effect=edge_unavailable), \
+             patch.object(server_voice, "azure_tts_generate_text", return_value=b"azure-audio") as azure:
+            audio = server_voice.generate_tts_source("I eat an apple.", "en")
+
+        self.assertEqual(audio, b"azure-audio")
+        azure.assert_called_once_with("I eat an apple.", "en")
+
+    def test_azure_english_ssml_escapes_sentence_text(self):
+        with patch.object(server_voice, "_azure_tts_request", return_value=b"azure-audio") as request:
+            self.assertEqual(server_voice.azure_tts_generate_text("Tom & Jerry", "en"), b"azure-audio")
+        ssml = request.call_args.args[0]
+        self.assertIn("xml:lang='en-US'", ssml)
+        self.assertIn("voice name='en-US-JennyNeural'", ssml)
+        self.assertIn("Tom &amp; Jerry", ssml)
+        self.assertNotIn("Tom & Jerry", ssml)
+
+    def test_english_tts_keeps_explicit_error_without_azure_config(self):
+        async def edge_unavailable(_text, _lang):
+            raise RuntimeError("edge-tts HTTP 403")
+
+        with patch.dict(os.environ, {
+            "AZURE_SPEECH_KEY": "",
+            "AZURE_SPEECH_REGION": "",
+        }), patch.object(server_voice, "edge_tts_generate", side_effect=edge_unavailable), \
+             patch.object(server_voice, "azure_tts_generate_text") as azure:
+            with self.assertRaisesRegex(RuntimeError, "edge-tts HTTP 403"):
+                server_voice.generate_tts_source("I eat an apple.", "en")
+
+        azure.assert_not_called()
+
     def test_upstream_rejects_a_reading_as_bad_input_not_gateway_failure(self):
         client = server_voice.app.test_client()
         with patch.object(server_voice, "azure_tts_generate",

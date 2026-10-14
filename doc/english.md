@@ -1,10 +1,16 @@
 # English lookup contract
 
-The child-facing page uses voice-only entry for both Chinese and English.
-One persistent microphone and language selector sit beside the results in
-iPad landscape and above them in portrait. Recognized English is queried
-directly, without an editable input. Sentence words remain tappable; returning
-from a word or a lookup error restores the original sentence.
+The child-facing page supports three English entry paths: voice input, a photo
+or album image of a textbook, and a manual word field. Photo OCR runs in the
+browser with the local English Tesseract assets; only the word selected by the
+child is sent to the existing lookup endpoint. Sentence words remain tappable;
+returning from a word or a lookup error restores the original sentence.
+
+The photo flow is intentionally small: take or choose one image, wait for the
+detected English words, then tap the word that is hard to read. A clear status
+message covers an empty result, a bad image, cancellation, and an OCR timeout.
+The camera menu and recognition quality on a physical iPad Safari remain an
+open device check.
 
 `POST /api/english` accepts JSON `{ "text": string }`. Text may contain at
 most 300 characters and 500 UTF-8 bytes. The original text is returned as
@@ -84,6 +90,22 @@ process does not download or decompress a dictionary during a request.
 
 The source contains 1,872 entries without a Chinese definition. These return
 an explicit missing-definition error; the app does not invent a meaning.
+
+## Child learning data and pronunciation
+
+`data/english-learning.json` contains the short Chinese explanation and one
+project-written bilingual example for common child vocabulary. It stays outside
+the private `data/english/` deployment exclusion so the static page can load it.
+The result page
+shows the short explanation first, keeps dictionary meanings under a details
+section, and shows an honest "not collected" message when a word is outside the
+learning file. The example uses the same `/api/tts?lang=en` path as the word.
+
+The voice server keeps Edge TTS as the default English provider. If that
+request fails and both `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` are set, it
+retries the English text through Azure with escaped SSML. Without Azure
+configuration the original explicit 502 remains; the server does not silently
+read a different language.
 
 Primary provider specifications: [MyMemory API](https://mymemory.translated.net/doc/spec.php),
 [usage limits](https://mymemory.translated.net/doc/usagelimits.php),
