@@ -13,7 +13,7 @@ SW=$(find /www/wwwroot -maxdepth 3 -name "char-dict.html" 2>/dev/null | head -1)
 if [ -n "$SW" ]; then
   echo "  站点文件: $SW"
   for pat in "CONC = 2" "lastTouch < 3000" "provider" "讯飞识别" "还没收进词库"; do
-    grep -q "$pat" "$SW" && echo "  ✓ 含: $pat" || echo "  ✗ 缺: $pat"
+    grep -q "$pat" "$SW" && echo "  含: $pat" || echo "  ✗ 缺: $pat"
   done
 fi
 echo "=== 2d) 语音服务 provider 字段 ==="

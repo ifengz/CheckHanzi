@@ -74,7 +74,7 @@ for line in open("results.txt"):
     exp = expected.get(name, "?")
     passed = got == exp
     ok += passed; fail += not passed
-    mark = "✅" if passed else "❌"
+    mark = "PASS" if passed else "FAIL"
     print(f"{mark} {name:14s} 期望「{exp}」 实际「{got}」 引擎={d.get('provider','?')}")
 print(f"\n结果：{ok} 通过 / {fail} 失败 / 共 {ok+fail}")
 PY

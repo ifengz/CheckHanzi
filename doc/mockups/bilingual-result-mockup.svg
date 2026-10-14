@@ -43,7 +43,8 @@
     <text x="180" y="647" text-anchor="middle" font-size="16" fill="#fff" opacity=".88">中文、English 都可以</text>
 
     <rect x="55" y="810" width="250" height="68" rx="20" fill="#fff" stroke="#f0e0c8" stroke-width="2" filter="url(#softShadow)"/>
-    <text x="180" y="853" text-anchor="middle" font-size="20" font-weight="700" class="dark">📖 查过的内容</text>
+    <g transform="translate(101 832)" fill="none" stroke="#425650" stroke-width="2" stroke-linejoin="round"><path d="M12 7v14M3 3h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5v16h-5a4 4 0 0 0-4 2 4 4 0 0 0-4-2H3Z"/></g>
+    <text x="195" y="853" text-anchor="middle" font-size="20" font-weight="700" class="dark">查过的内容</text>
   </g>
 
   <!-- right content -->

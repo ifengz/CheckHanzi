@@ -5,15 +5,15 @@ The production entry is https://hanzi.usfan.net/char-dict.html. The domain root 
 Before pushing deploy:
 
 - Read doc/core/lessons.md and the active task plan.
-- Run `node .github/scripts/check-client.mjs` and the dictionary integrity check.
+- Run `node .github/scripts/check-client.mjs` and the dictionary integrity check, plus `node .github/scripts/check-english-input.mjs`.
 - Verify the working page through ego-lite against real voice responses. The legacy local dev-server.py mock endpoints cannot establish voice behavior.
 - Check a cached and an uncached utterance, repeated clicks, switching characters, navigation during loading, and explicit network failure.
 - Check complex characters and all result candidates at iPad landscape, reduced landscape height, portrait, and phone widths. No glyph clipping, overlapping sections, or inaccessible controls.
 - Confirm dictionary source versions, licenses, generated data integrity, and unchanged existing entries.
 - Review `git diff`, run `git diff --check`, and stage only the scoped release files. Process records and local test evidence remain ignored.
-- Keep voice credentials, unrelated server configuration, and unrelated files unchanged. English lookup uses the approved pinned ECDICT dataset and MyMemory translation API; English speech uses the existing recognizer and Edge TTS provider.
+- Keep voice credentials, unrelated server configuration, and unrelated files unchanged. English lookup uses the approved pinned ECDICT dataset and MyMemory translation API; English speech uses the existing recognizer and Edge TTS provider, with Azure fallback when Edge fails and Azure is configured.
 - Run `.github/scripts/check-english.py` after decompressing the packaged dictionary; verify its source and asset manifest. Run `tests/check_voice_backend.py`, including its real Edge TTS case. Required Python packages include Flask, flask-cors, numpy, edge-tts and imageio-ffmpeg==0.6.0.
-- Verify voice-only Chinese and English entry, spoken words and complete sentences, I/a/apostrophe preservation, sentence-word return, network/quota errors, and language changes during pending work. No child-facing typing field may remain.
+- Verify Chinese voice entry and English voice/photo/manual entry, spoken words and complete sentences, I/a/apostrophe preservation, sentence-word return, network/quota errors, and language changes during pending work. Verify local OCR photo selection, cancellation, manual correction, child explanations, and word/example playback.
 - Verify silent PCM is rejected before ASR on both client and server, quiet valid PCM is retained, stale microphone tracks are replaced, interrupted audio is resumed, and cancel/repress during permission shares one acquisition without orphan streams.
 - At iPad browser landscape sizes, verify the persistent large microphone on the left and scrollable results on the right in both languages, including Chinese detail/history. Check large touch targets and the stacked portrait layout.
 - Verify old Chinese history survives the update, successful English words/sentences and Chinese selections are recorded, repeated history-open/back preserves navigation, and canceling clear preserves both languages. Confirmed clear must affect only the selected language. Preserve existing browser history during production checks.

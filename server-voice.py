@@ -3,7 +3,7 @@
 查字宝 - 云端语音代理服务 v3
 ==============================
   POST /api/asr  — 语音识别
-  GET  /api/tts  — 语音合成（edge-tts 微软晓晓，免费无 key）
+  GET  /api/tts  — 语音合成（默认 edge-tts；英文失败且已配置 Azure 时兜底）
   GET  /api/ping — 健康检查
 
 识别引擎链（按顺序自动回退）：
@@ -19,6 +19,7 @@
 """
 
 import os, io, re, wave, asyncio, threading, time, tempfile
+import xml.sax.saxutils as xml_escape
 import numpy as np
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
@@ -279,8 +280,8 @@ def get_sensevoice():
             if _sv_recognizer is None:
                 _sv_recognizer = _make_sensevoice("zh")
                 if _sv_recognizer is not None:
-                    print("[asr] SenseVoice-small(sherpa-onnx) 就绪 ✓", flush=True)
-                    globals()["ENGINE_STATUS"] = "SenseVoice-small ✓"
+                    print("[asr] SenseVoice-small(sherpa-onnx) 就绪", flush=True)
+                    globals()["ENGINE_STATUS"] = "SenseVoice-small 就绪"
     return _sv_recognizer
 
 def get_sensevoice_en():
@@ -293,7 +294,7 @@ def get_sensevoice_en():
             if _sv_en_recognizer is None:
                 _sv_en_recognizer = _make_sensevoice("en")
                 if _sv_en_recognizer is not None:
-                    print("[asr] SenseVoice-small(en) 就绪 ✓", flush=True)
+                    print("[asr] SenseVoice-small(en) 就绪", flush=True)
     return _sv_en_recognizer
 
 def _sv_decode(rec, wav_bytes, lang: str):
@@ -509,14 +510,18 @@ async def edge_tts_generate(text: str, lang: str) -> bytes:
     return b"".join(chunks)
 
 
-def azure_tts_generate(ssml: str) -> bytes:
-    """粤语专用：只有 Azure 官方接口能按我们给的粤拼逐字定读法（edge-tts 不吃 SSML）"""
+def azure_tts_configured() -> bool:
+    return bool(os.environ.get("AZURE_SPEECH_KEY", "").strip()
+                and os.environ.get("AZURE_SPEECH_REGION", "").strip())
+
+
+def _azure_tts_request(ssml: str, missing_message: str) -> bytes:
     import urllib.error
     import urllib.request
     key = os.environ.get("AZURE_SPEECH_KEY", "").strip()
     region = os.environ.get("AZURE_SPEECH_REGION", "").strip()
     if not key or not region:
-        raise RuntimeError("粤语朗读未配置（缺 AZURE_SPEECH_KEY / AZURE_SPEECH_REGION）")
+        raise RuntimeError(missing_message)
     req = urllib.request.Request(f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1",
                                  data=ssml.encode("utf-8"), method="POST",
                                  headers={"Ocp-Apim-Subscription-Key": key,
@@ -531,6 +536,32 @@ def azure_tts_generate(ssml: str) -> bytes:
         if 400 <= error.code < 500:
             raise voice_audio.ReadingRejectedError(f"Azure 不接受这个读法 HTTP {error.code}")
         raise RuntimeError(f"Azure 合成失败 HTTP {error.code}")
+
+
+def azure_tts_generate(ssml: str) -> bytes:
+    """粤语专用：只有 Azure 官方接口能按我们给的粤拼逐字定读法（edge-tts 不吃 SSML）"""
+    return _azure_tts_request(ssml, "粤语朗读未配置（缺 AZURE_SPEECH_KEY / AZURE_SPEECH_REGION）")
+
+
+def azure_tts_generate_text(text: str, lang: str) -> bytes:
+    """英文 Edge TTS 失败时的最小云端兜底；文本先转义，再交给 Azure。"""
+    locale = "en-US" if lang == "en" else "zh-CN"
+    voice = voice_audio.voice_for_language(lang)
+    ssml = ("<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
+            f"xml:lang='{locale}'><voice name='{xml_escape.escape(voice)}'>"
+            f"{xml_escape.escape(text)}</voice></speak>")
+    return _azure_tts_request(ssml, "英语朗读未配置（缺 AZURE_SPEECH_KEY / AZURE_SPEECH_REGION）")
+
+
+def generate_tts_source(text: str, lang: str) -> bytes:
+    """先用免费 Edge；英文上游不可用时，且 Azure 已配置，再重试一次。"""
+    try:
+        return asyncio.run(asyncio.wait_for(edge_tts_generate(text, lang), timeout=12))
+    except Exception as edge_error:
+        if lang == "en" and azure_tts_configured():
+            print(f"[tts] edge-tts 英文失败，改用 Azure: {type(edge_error).__name__}", flush=True)
+            return azure_tts_generate_text(text, lang)
+        raise
 
 @app.route("/api/tts", methods=["GET"])
 def tts_handler():
@@ -563,7 +594,7 @@ def tts_handler():
                 return jsonify({"error": str(error)}), 400
             source_mp3 = azure_tts_generate(ssml)
         else:
-            source_mp3 = asyncio.run(asyncio.wait_for(edge_tts_generate(text, lang), timeout=12))
+            source_mp3 = generate_tts_source(text, lang)
         if not source_mp3:
             return jsonify({"error": "生成失败"}), 500
         mp3_data = voice_audio.normalize_mp3_bytes(source_mp3)
@@ -598,21 +629,21 @@ def ping():
         "asr": True,
         "tts": True,
         "model": ("讯飞语音听写 → " if XFYUN_ENABLED else "") + ENGINE_STATUS,
-        "provider": ("讯飞(商业) + " if XFYUN_ENABLED else "") + "本地推理 SenseVoice/whisper + edge-tts",
+        "provider": ("讯飞(商业) + " if XFYUN_ENABLED else "") + "本地推理 SenseVoice/whisper + edge-tts（英文 Azure 兜底）",
     })
 
 if __name__ == "__main__":
     print(f"查字宝语音代理 v3 → http://0.0.0.0:{LISTEN_PORT}")
     xfyun_tip = " + 讯飞商业(已配置)" if XFYUN_ENABLED else "（讯飞未配置，设 XFYUN_APP_ID/XFYUN_API_KEY/XFYUN_API_SECRET 启用）"
     print(f"  识别: {ASR_ENGINE}(主)" + xfyun_tip + (f" + faster-whisper({WHISPER_MODEL})回退" if ASR_ENGINE == "sensevoice" else ""))
-    print("  朗读: edge-tts 晓晓")
+    print("  朗读: edge-tts 晓晓（英文 Azure 兜底）")
     threading.Thread(
         target=lambda: (
             print("预热识别模型…", flush=True),
             # 预热 SenseVoice 中/英两个实例（各 ~500MB，推理 0.4s 级）：中文主路径 + 英文快路径。
             # whisper 不再常驻预热——服务器内存吃紧（swap 已满），且它现在只是罕见最后兜底，用时再懒加载。
             (get_sensevoice(), get_sensevoice_en()) if ASR_ENGINE == "sensevoice" else get_whisper(),
-            print("模型就绪 ✓", flush=True),
+            print("模型就绪", flush=True),
         ),
         daemon=True,
     ).start()

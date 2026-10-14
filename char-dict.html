@@ -273,6 +273,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #home .language-mode{order:1;}
 #home #recBtn{order:2;}
 #home #historyBtn{order:4;}
+#home #englishPhotoBtn{order:3;width:100%;min-height:64px;padding:12px 10px;border:2px solid #80B4BD;border-radius:12px;background:#E9F5F4;color:#176476;font-size:21px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px;touch-action:manipulation;cursor:pointer;}
+#englishPhotoBtn svg{width:28px;height:28px;flex:none;}
 #home #asrSource{order:5;width:100%;margin:0;text-align:center;font-size:13px;line-height:18px;color:#8E7550;}
 #home #asrSource:empty{display:none;}
 #home #warnBanner{order:6;}
@@ -301,7 +303,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   #home #historyBtn{grid-column:2;grid-row:3;min-width:0;font-size:17px;padding:8px;}
   #home #railBack{grid-column:3;grid-row:3;margin:0;font-size:17px;padding:8px;}
   #home #asrSource{grid-column:2 / -1;grid-row:4;text-align:left;}
+  #home #englishPhotoBtn{grid-column:1 / -1;grid-row:4;}
+  #home #asrSource{grid-row:5;}
   #home #warnBanner{grid-column:1 / -1;grid-row:5;max-width:none;text-align:left;padding:12px;font-size:15px;line-height:1.5;}
+  #home #warnBanner{grid-row:6;}
   #home #warnBanner .warning-content{display:flex;align-items:center;justify-content:space-between;gap:12px;}
   #home #warnBanner button{margin:0;min-width:80px;flex-shrink:0;}
   #lookupWorkspace{flex:1;width:100%;}
@@ -320,6 +325,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
 #micStatus{order:3;min-height:20px;margin:0;text-align:center;font-size:13px;line-height:20px;color:#555;}
 #micStatus[data-state="ready"]{color:#237744;}
 @media (max-width:899px), (orientation:portrait){#home #micStatus{grid-column:2 / -1;grid-row:2;text-align:left;overflow-wrap:anywhere;}}
+/* Emoji replacements occupy the same inline space as the original symbols. */
+#historyBtn svg,.hist-btn svg,#warnBanner svg,#voiceEcho svg,#rTitle svg,.recognizing svg{width:1em;height:1em;vertical-align:-.15em;}
+#rTitle svg,.recognizing svg{margin-right:.25em;}
 </style>
 
 </head>
@@ -334,17 +342,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   </div>
   <button id="recBtn" aria-label="按住说话查字"><span class="mic" data-lucide="mic"></span><span class="hint">按住说字</span><span class="rec-state"><span class="rec-wave"><i></i><i></i><i></i><i></i><i></i></span><span class="rec-ring"></span><span class="rec-dots"><i></i><i></i><i></i></span><span class="rec-txt">松开 查字</span></span></button>
   <p id="micStatus" role="status" aria-live="polite" data-state="idle">正在检查麦克风…</p>
-  <button id="historyBtn">📖 查过的内容 <span class="n" id="histCount"></span></button>
+  <button id="englishPhotoBtn" type="button"><span data-lucide="camera"></span><span class="english-button-label">拍照查英文</span></button>
+  <button id="historyBtn"><span data-lucide="book-open"></span> <span class="button-label">查过的内容</span> <span class="n" id="histCount"></span></button>
   <button id="railBack" hidden>‹ 返回</button>
   <p id="asrSource"></p>
-  <div id="warnBanner"><div class="warning-content"><span>⚠️ 语音功能未就绪，请检查网络后重试。</span><button id="voiceRetry" type="button">重试</button></div></div>
+  <div id="warnBanner"><div class="warning-content"><span><span data-lucide="alert-triangle"></span><span>语音功能未就绪，请检查网络后重试。</span></span><button id="voiceRetry" type="button">重试</button></div></div>
 </div>
 
 <main id="lookupWorkspace">
   <div id="results">
-    <div class="page-head"><button id="resBack">‹ 返回</button><span class="brand">查字宝</span><button id="resHistBtn" class="hist-btn" aria-label="查过的内容">📖 <span id="resHistCount"></span></button></div>
-    <div id="voiceEcho" style="display:none;margin:4px 12px 0;padding:6px 10px;background:#FFF3E0;border-radius:12px;font-size:clamp(13px,1.8vh,15px);color:#8D6E63;line-height:1.5;flex-shrink:0;"><b style="color:#FF7A00;">🗣</b> <span id="voiceEchoTxt"></span></div>
-    <div class="r-title" id="rTitle" style="font-size:clamp(16px,2.2vh,22px);margin:clamp(2px,.3vh,6px) 0 0;">📖 你读的是哪个字？</div>
+    <div class="page-head"><button id="resBack">‹ 返回</button><span class="brand">查字宝</span><button id="resHistBtn" class="hist-btn" aria-label="查过的内容"><span data-lucide="book-open"></span> <span class="button-label">查过的内容</span> <span id="resHistCount"></span></button></div>
+    <div id="voiceEcho" style="display:none;margin:4px 12px 0;padding:6px 10px;background:#FFF3E0;border-radius:12px;font-size:clamp(13px,1.8vh,15px);color:#8D6E63;line-height:1.5;flex-shrink:0;"><span data-lucide="message-circle"></span> <span id="voiceEchoTxt"></span></div>
+    <div class="r-title" id="rTitle" style="font-size:clamp(16px,2.2vh,22px);margin:clamp(2px,.3vh,6px) 0 0;"><span data-lucide="book-open"></span><span>你读的是哪个字？</span></div>
     <div class="r-sub" id="rSub" style="font-size:clamp(12px,1.6vh,16px);">点一下就能看笔顺和部首</div>
     <div id="resMainArea">
       <div id="resultChars"></div>
@@ -353,7 +362,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans G
   </div>
 
   <div id="detail">
-    <div class="page-head"><button id="backBtn">‹ 返回</button><button id="detHistBtn" class="hist-btn" aria-label="查过的内容">📖 <span id="detHistCount"></span></button></div>
+    <div class="page-head"><button id="backBtn">‹ 返回</button><button id="detHistBtn" class="hist-btn" aria-label="查过的内容"><span data-lucide="book-open"></span> <span class="button-label">查过的内容</span> <span id="detHistCount"></span></button></div>
     <div id="detailBody">
       <div class="char-hero">
         <div id="detailPinyin"></div>
@@ -420,7 +429,7 @@ var characterStrokeChars = "";
 })(typeof CHARACTER_DATA === "object" ? CHARACTER_DATA : null);
 
 var mode = "cn"; var current = null; var currentHomophones = []; var histList = []; var englishHistList = []; var resultsFromHistory = false; var resultsView = null;
-var lookupLanguage = "zh"; var englishLookupController = null;
+var lookupLanguage = "zh"; var englishLookupController = null; var englishInputController = null;
 function loadHistory(key){ try{ var value = JSON.parse(localStorage.getItem(key)||"[]"); return Array.isArray(value) ? value : []; }catch(e){ return []; } }
 histList = loadHistory("chazi_history");
 englishHistList = loadHistory("english_history");
@@ -1049,6 +1058,10 @@ function wireRailBack(){
   var btn = $("railBack"); if(!btn || btn.dataset.wired) return;
   btn.dataset.wired = "1";
   btn.addEventListener("click", function(){
+    if(!$("englishLookupRoot").hidden && englishInputController){
+      englishInputController.returnToChinese();
+      return;
+    }
     var target = $("detail").classList.contains("show") ? $("backBtn") : $("resBack");
     if(target) target.click();
   });
@@ -1063,7 +1076,10 @@ function showWorkspace(page){
   renderLookupCounter(page === "results" || page === "detail" || page === "english");
   wireRailBack();
   var railBack = $("railBack");
-  if(railBack) railBack.hidden = !(page === "results" || page === "detail");
+  if(railBack){
+    railBack.hidden = !(page === "results" || page === "detail" || page === "english");
+    railBack.setAttribute("aria-label", page === "english" ? "返回查字" : "返回");
+  }
 }
 function showResultsPage(chars, toneNum, fromHistory, preserveAll){
   cancelSpeech();
@@ -1365,7 +1381,7 @@ function updateHistoryUI(){
   ["historyBtn","resHistBtn","detHistBtn"].forEach(function(id){
     var button = $(id); if(!button) return;
     button.setAttribute("aria-label", "查过的内容");
-    if(button.firstChild && button.firstChild.nodeType === 3) button.firstChild.nodeValue = "📖 查过的内容 ";
+
   });
   renderHistCount();
 }
@@ -1540,11 +1556,17 @@ $("backBtn").addEventListener("click", function(){ cancelSpeech(); cleanups.forE
 $("detHistBtn").addEventListener("click", openHistory);
 var rec = { active:false, timer:null, cancelled:false, startY:0, animTimer:null, btn:null, tipTimer:null, captureSeq:0 };
 // 识别等待提示语：让孩子知道"它在认真工作"，轮播缓解等待无聊
-var recTips = ["🔍 认真听你说…","✨ 在找字宝宝…","🌈 马上就好…","⭐ 马上出来啦…"];
+var recTips = [{icon:"search", text:"认真听你说…"},{icon:"sparkle", text:"在找字宝宝…"},{icon:"rainbow", text:"马上就好…"},{icon:"star", text:"马上出来啦…"}];
+function setRecTip(el, tip){
+  if(!el) return;
+  el.textContent = "";
+  if(window.LucideIcons) el.appendChild(window.LucideIcons.icon(tip.icon));
+  el.appendChild(document.createTextNode(tip.text));
+}
 function startRecTips(el){
   stopRecTips(); if(!el) return;
-  var i = 0; el.textContent = recTips[0]; el.classList.add("recognizing");
-  rec.tipTimer = setInterval(function(){ i = (i+1) % recTips.length; el.textContent = recTips[i]; }, 800);
+  var i = 0; setRecTip(el, recTips[0]); el.classList.add("recognizing");
+  rec.tipTimer = setInterval(function(){ i = (i+1) % recTips.length; setRecTip(el, recTips[i]); }, 800);
 }
 function stopRecTips(){ if(rec.tipTimer){ clearInterval(rec.tipTimer); rec.tipTimer = null; } }
 // 预加载读音：页面显示时后台提前下好音频，点击时复用同一个在途请求。
@@ -1558,7 +1580,7 @@ function prefetchTTS(text, lang){
   if(prefetching[key]) return prefetching[key].promise;
   var x = new XMLHttpRequest();
   var promise = new Promise(function(resolve, reject){
-    x.open("GET","/api/tts?text="+encodeURIComponent(text)+"&lang="+lang+"&v="+TTS_VERSION+(readings ? "&readings="+encodeURIComponent(readings) : ""),true); x.responseType="arraybuffer"; x.timeout=8000;
+    x.open("GET","/api/tts?text="+encodeURIComponent(text)+"&lang="+lang+"&v="+TTS_VERSION+(readings ? "&readings="+encodeURIComponent(readings) : ""),true); x.responseType="arraybuffer"; x.timeout=lang === "en" ? 30000 : 8000;
     x.onload = function(){
       if(x.status !== 200 || !x.response || x.response.byteLength <= 500){ reject(new Error("朗读服务返回失败")); return; }
       try{ ensureAudio(); audioCtx.decodeAudioData(x.response).then(function(buf){
@@ -1796,7 +1818,8 @@ function resetMixedSentenceUI(){
   mixedEnglishDetailController = null;
   var echo = $("voiceEcho");
   if(!echo) return;
-  echo.innerHTML = '<b style="color:#FF7A00;">🗣</b> <span id="voiceEchoTxt"></span>';
+  echo.innerHTML = '<span data-lucide="message-circle"></span> <span id="voiceEchoTxt"></span>';
+  if(window.LucideIcons){ var echoIcon = echo.querySelector("[data-lucide=message-circle]"); echoIcon.replaceWith(window.LucideIcons.icon("message-circle")); }
   echo.style.display = "none";
   var title = $("rTitle"); if(title) title.style.display = "";
   var sub = $("rSub"); if(sub) sub.style.display = "";
@@ -2207,7 +2230,8 @@ function showSelectMode(text){
   // 意图命中的第一个字（最可能是孩子想查的）标记出来
   var best = ranked.length ? ranked[0] : null;
   $("rTitle").style.display = ""; $("rSub").style.display = "";
-  $("rTitle").textContent = best ? ("📖 你说的是一句话——你想查的可能是「" + best + "」") : "📖 你说的是一句话，里面有几个字——点你要查的那个";
+  $("rTitle").textContent = best ? ("你说的是一句话——你想查的可能是「" + best + "」") : "你说的是一句话，里面有几个字——点你要查的那个";
+  var titleIcon = document.createElement("span"); titleIcon.setAttribute("data-lucide", "book-open"); $("rTitle").insertBefore(titleIcon, $("rTitle").firstChild); if(window.LucideIcons) titleIcon.replaceWith(window.LucideIcons.icon("book-open"));
   $("rSub").textContent = "点你要查的那个字";
   showResultsPage(list, 0);
   var echo = $("voiceEcho");
@@ -2350,6 +2374,7 @@ window.addEventListener("english-lookup-ready", function(event){
     speak: function(text, button, lang){ speak(text, button, lang); },
     prefetchTTS: function(text, lang){ return prefetchTTS(text, lang); },
     cancelSpeech: function(){ cancelSpeech(); },
+    cancelInput: function(){ if(englishInputController) englishInputController.cancelPending(); },
     icon: function(name){ return window.LucideIcons ? window.LucideIcons.icon(name) : null; },
     isEnglish: function(){ return lookupLanguage === "en"; },
     onLanguageChange: setLookupLanguage,
@@ -2358,10 +2383,23 @@ window.addEventListener("english-lookup-ready", function(event){
     onHistoryBack: returnFromEnglishHistory
   });
   englishLookupController.setLanguage("zh");
+  if(window.EnglishInput){
+    englishInputController = window.EnglishInput.mount({
+      root: $("englishLookupRoot"),
+      homeButton: $("englishPhotoBtn"),
+      controller: englishLookupController,
+      cancelRecognition: function(){
+        if(rec.active || rec.releasePending || rec.recorderObj) cancelRecording();
+        else { rec.captureSeq++; setRecState("off"); }
+      },
+      icon: function(name){ return window.LucideIcons ? window.LucideIcons.icon(name) : null; }
+    });
+  }
 });
 </script>
-<link rel="stylesheet" href="english-lookup.css?v=history1">
-<script src="lucide-icons.js?v=history1"></script>
-<script src="english-lookup.js?v=history1"></script>
+<link rel="stylesheet" href="english-lookup.css?v=photo2">
+<script src="lucide-icons.js?v=icons1"></script>
+<script src="english-input.js?v=photo3"></script>
+<script src="english-lookup.js?v=photo1"></script>
 </body>
 </html>
