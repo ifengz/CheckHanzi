@@ -28,6 +28,11 @@ CJK = re.compile(r"[㐀-鿿]")
 CJK_WORD = re.compile(r"[㐀-鿿]+")
 JP_SYLLABLE = re.compile(r"^[a-z]+\d$")
 
+# Reviewed word contexts; keep these subject to the candidate check below.
+# LSHK CRAT Appendix 2 lists 乾坤 as kin4 kwan1 (乾 here is not 'dry').
+# https://lshk.org/wp-content/uploads/2022/11/CRAT_Appendix2_bystroke_1.3.pdf
+WORD_READING_OVERRIDES = {"乾坤": ["kin4", "kwan1"]}
+
 
 def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -141,7 +146,7 @@ def main():
 
     word_data, word_stats, warn = {}, {"ok": 0, "partial": 0, "warn": 0}, []
     for word in sorted(words):
-        readings = tojyutping(word)
+        readings = WORD_READING_OVERRIDES[word] if word in WORD_READING_OVERRIDES else tojyutping(word)
         if len(readings) != len(word) or any(r is None for r in readings):
             word_stats["partial"] += 1
             continue

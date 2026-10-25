@@ -65,8 +65,19 @@ assert.ok(en && en.meta && en.word && en.char, "invalid generated English table"
 assert.match(page, /<script src="models\/dictionary\/english-data\.js"><\/script>/, "page must load the Chinese-to-English table");
 assert.equal(en.meta.licence, "MIT", "ECDICT licence must be recorded");
 assert.match(en.meta.sha256, /^[0-9a-f]{64}$/, "ECDICT source checksum is missing");
-assert.ok(Object.keys(en.word).length >= 3600, "English word coverage is below the required floor");
-assert.ok(Object.keys(en.char).length >= 860, "English character coverage is below the required floor");
+// Domain-qualified glosses are not safe standalone translations; coverage must not force them back in.
+assert.ok(Object.keys(en.word).length >= 3577, "English word coverage is below the reviewed floor");
+assert.ok(Object.keys(en.char).length >= 830, "English character coverage is below the reviewed floor");
+assert.equal(en.meta.word, Object.keys(en.word).length, "English word metadata must match the table");
+assert.equal(en.meta.char, Object.keys(en.char).length, "English character metadata must match the table");
+assert.equal(en.word["地址"], undefined, "domain-limited address gloss must not become a standalone translation");
+for (const ch of ["姑", "姨"]) assert.equal(en.char[ch], undefined, `${ch} must not inherit a domain-limited kinship gloss`);
+assert.ok(!baseDict["侯"].w.includes("时侯"), "侯 must not teach the misspelling 时侯");
+assert.ok(baseDict["坤"].w.includes("乾坤"), "坤 must teach the correct word 乾坤");
+assert.ok(!baseDict["坤"].w.includes("干坤"), "坤 must not teach the misspelling 干坤");
+assert.deepEqual(JSON.parse(JSON.stringify(yue.word["乾坤"])), ["kin4", "kwan1"], "乾坤 needs its word-specific reading");
+assert.equal(yue.word["时侯"], undefined, "removed misspelling must not survive in generated Cantonese data");
+assert.equal(yue.word["干坤"], undefined, "removed misspelling must not survive in generated Cantonese data");
 for (const [table, name] of [[en.word, "word"], [en.char, "char"]]) {
   for (const [chinese, value] of Object.entries(table)) {
     assert.ok(/^[A-Za-z][A-Za-z'’ .-]{0,20}$/.test(value), `${name} ${chinese} maps to a non-word: ${value}`);

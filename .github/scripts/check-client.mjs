@@ -1450,6 +1450,124 @@ assert.deepEqual(EnglishHistoryCalls, [['older', false, true, true]], 'opening a
 historyContext.returnFromEnglishHistory();
 historyElement('histBack').click();
 assert.deepEqual(restoredEnglishViews, [originalEnglishHistoryView], 'English history exit must restore the result that originally opened history');
+
+// Exercise real Chinese renderers and navigation, not a renderDetail spy.
+class HistoryNode extends TestNode {
+  constructor(id = '') { super(); this.id = id; this.dataset = {}; this.scrollTop = 0; }
+  click() {
+    const event = {stopPropagation() {}};
+    if (this.onclick) this.onclick(event);
+    if (this.listeners.click) this.listeners.click.call(this, event);
+  }
+  appendChild(child) {
+    if (child.parentNode) child.parentNode.children = child.parentNode.children.filter(node => node !== child);
+    return super.appendChild(child);
+  }
+  querySelector(selector) { return selector === 'button' || selector === '.spk' ? new HistoryNode() : null; }
+  querySelectorAll(selector) {
+    const found = [];
+    const visit = node => { for (const child of node.children) { if (selector === '.mixed-inline-token' && child.classList.contains('mixed-inline-token')) found.push(child); visit(child); } };
+    visit(this); return found;
+  }
+  set innerHTML(value) {
+    super.innerHTML = value;
+    if (String(value).includes('id="mixedTokenRow"')) {
+      for (const id of ['mixedTokenRow', 'sentenceMeaning', 'mixedDetailHost']) {
+        const node = new HistoryNode(id); navigationNodes.set(id, node); this.appendChild(node);
+      }
+      navigationNode('mixedDetailHost').hidden = true;
+    }
+  }
+  get innerHTML() { return super.innerHTML; }
+}
+const navigationNodes = new Map();
+const navigationNode = id => {
+  if (!navigationNodes.has(id)) navigationNodes.set(id, new HistoryNode(id));
+  return navigationNodes.get(id);
+};
+const navigationContext = vm.createContext({
+  Date, JSON, Array, console,
+  localStorage: { getItem: () => null, setItem() {} },
+  $: navigationNode,
+  document: {
+    createElement: () => new HistoryNode(), getElementById: navigationNode, addEventListener() {}, querySelector: () => null,
+    querySelectorAll: () => navigationNode('mixedTokenRow').querySelectorAll('.mixed-inline-token').filter(node => node.classList.contains('selected')),
+  },
+  window: {}, requestAnimationFrame: callback => callback(), clearInterval() {},
+  DICT: { 好: {p:['hǎo','hào'],w:[]}, 花: {p:'huā',w:[]}, 华: {p:'huá',w:[]}, 学: {p:'xué',w:[]}, 习: {p:'xí',w:[]}, 我: {p:'wǒ',w:[]} },
+  detectTone: p => p === 'hào' ? 4 : 3,
+  cancelSpeech() {}, prefetchTTS: () => Promise.resolve(), prefetchTTSList() {},
+  fitDetailChar() {}, fitResultCards() {}, fitStrokeCells() {}, renderRadical() {}, renderStrokes() {}, renderWords() {},
+  readoutTrio: () => new HistoryNode(), renderLookupCounter() {}, recordLookup() {}, speakerIcon() {}, speak() {}, toast() {}, esc: String,
+  yueAlign: () => [], sentenceReadoutEl: () => null, loadCombinedEnglishResult() {},
+  cleanups: [], lookupLanguage: 'zh', englishLookupController: null, englishInputController: null,
+});
+const loadNavigation = (start, end) => {
+  const from = html.indexOf(start), to = html.indexOf(end, from + start.length);
+  assert.ok(from >= 0 && to > from, `navigation source range: ${start}`);
+  vm.runInContext(html.slice(from, to), navigationContext);
+};
+loadNavigation('var mode = "cn";', 'var toastTimer');
+loadNavigation('function addHistory(', 'var rec =');
+loadNavigation('function wireRailBack(', '// Size each glyph');
+loadNavigation('function renderDetail(', 'function fitDetailChar(');
+loadNavigation('var combinedEnglishSeq =', 'function renderMixedEnglishDetailForWord(');
+loadNavigation('function showCombinedSentenceMode(', 'function handleVoiceResult(');
+loadNavigation('function showVoiceResults(', 'updateHistoryUI();');
+navigationNode('detail').appendChild(navigationNode('detailBody'));
+const nav = navigationContext;
+nav.showVoiceResults(['好'], '好第四声', 4, true);
+navigationNode('resultChars').children[0].click();
+assert.equal(navigationNode('detailPinyin').textContent, 'hào');
+nav.openHistory(); navigationNode('histBack').click();
+assert.equal(navigationNode('detailPinyin').textContent, 'hào', 'history exit must preserve the selected fourth-tone reading');
+nav.openHistory();
+nav.histList = [{c:'好',t:1}]; nav.renderHistory();
+navigationNode('historyList').children[0].click();
+assert.equal(navigationNode('detailPinyin').textContent, 'hǎo', 'an old character record without tone must use its own default reading');
+navigationNode('backBtn').click(); navigationNode('histBack').click();
+assert.equal(navigationNode('detailPinyin').textContent, 'hào', 'viewing an old character must not overwrite the original tone');
+navigationNode('backBtn').click();
+assert.equal(navigationNode('voiceEchoTxt').textContent, '好第四声', 'returning to candidates must retain the recognized query');
+assert.equal(navigationNode('voiceEcho').style.display, 'block');
+
+nav.showResultsPage(['花','华'], 0, false, false);
+navigationNode('resultChars').children[0].click();
+nav.openHistory();
+nav.openChineseWordHistory({w:'学习'});
+navigationNode('resultChars').children[0].click();
+// The history button inside a history detail must return to the same history session.
+nav.openHistory(); navigationNode('histBack').click();
+assert.equal(navigationNode('detailChar').textContent, '花');
+navigationNode('backBtn').click();
+assert.deepEqual(Array.from(nav.resultsView.chars), ['花','华'], 'detail back must restore the original candidates after browsing a history word');
+assert.equal(nav.resultsFromHistory, false);
+navigationNode('resBack').click();
+assert.equal(navigationNode('history').classList.contains('show'), false, 'original candidates must return home, not into history');
+
+const restoredPhraseRequests = [];
+nav.loadCombinedEnglishResult = (...args) => restoredPhraseRequests.push(args);
+nav.showCombinedSentenceMode('我我 apple');
+navigationNode('mixedTokenRow').querySelectorAll('.mixed-inline-token')[1].click();
+nav.openHistory();
+const savedSnapshot = JSON.stringify(nav.historyReturn);
+nav.openChineseWordHistory({w:'学习'});
+navigationNode('resultChars').children[0].click();
+navigationNode('backBtn').click();
+const recordsBeforeRestore = JSON.stringify(nav.histList);
+assert.equal(JSON.stringify(nav.historyReturn), savedSnapshot, 'history browsing must not mutate the saved original view');
+navigationNode('histBack').click();
+assert.equal(nav.resultsView.text, '我我 apple');
+assert.equal(navigationNode('results').classList.contains('show'), true);
+assert.equal(navigationNode('detailBody').parentNode, navigationNode('mixedDetailHost'), 'mixed Chinese detail must return to the recreated inline host');
+assert.equal(navigationNode('mixedDetailHost').hidden, false);
+assert.equal(navigationNode('detailChar').textContent, '我');
+assert.deepEqual(navigationNode('mixedTokenRow').querySelectorAll('.mixed-inline-token').map(node => node.classList.contains('selected')), [false,true,false], 'repeated characters must preserve the selected occurrence');
+assert.equal(JSON.stringify(nav.histList), recordsBeforeRestore, 'restoring a mixed detail must not record a new history visit');
+assert.deepEqual(restoredPhraseRequests.at(-1), ['apple',true], 'restoring a sentence must suppress new English history writes without changing its navigation origin');
+assert.equal(nav.resultsFromHistory, false);
+nav.openHistory(); navigationNode('histBack').click();
+assert.equal(navigationNode('detailBody').parentNode, navigationNode('mixedDetailHost'), 'a second history visit must preserve the inline detail again');
 // 笔顺格子：每行最多 8 个，并且要把整行宽度用满（孩子看不清就是这两条被破坏）
 const fitStart = html.indexOf('function fitStrokeCells(');
 const fitEnd = html.indexOf('\n}', fitStart) + 2;

@@ -39,6 +39,19 @@ def gloss_tokens(translation):
     return out
 
 
+def gloss_candidates(translation):
+    # Keep delimiters attached so ordinary glosses retain their existing ranks.
+    parts = re.split(r"(\\r\\n|\\n|\r\n|\n)", translation or "")
+    lines = [parts[0]] + [parts[i] + parts[i + 1] for i in range(1, len(parts), 2)]
+    index = 0
+    for line in lines:
+        # A domain/usage label qualifies the whole line, including later synonyms.
+        qualified = bool(re.search(r"\[[^\]]+\]", line))
+        for token in gloss_tokens(line):
+            yield index, token, qualified
+            index += 1
+
+
 def build(csv_path, expected_sha, lock):
     actual = sha256(csv_path)
     if actual != expected_sha:
@@ -63,15 +76,17 @@ def build(csv_path, expected_sha, lock):
             if re.search(r"(?:^|/)0:(?!$)[A-Za-z]", row.get("exchange") or ""):
                 continue
             single = 0 if re.fullmatch(r"[a-z]+", word) else 1
-            for index, token in enumerate(gloss_tokens(row.get("translation"))):
+            for index, token, qualified in gloss_candidates(row.get("translation")):
                 if token not in universe:
                     continue
                 score = (index, 0 if oxford else 1, 0 if collins else 1,
                          frq or 10 ** 9, bnc or 10 ** 9, single, len(word), word.lower())
                 current = best.get(token)
                 if current is None or score < current[0]:
-                    best[token] = (score, word)
-    table = {token: value[1] for token, value in best.items()}
+                    best[token] = (score, word, qualified)
+    # Do not promote a different, unreviewed meaning when the winning gloss is
+    # qualified: this table cannot display that context, so leave it unavailable.
+    table = {token: value[1] for token, value in best.items() if not value[2]}
     word_part = {k: v for k, v in table.items() if k in words}
     char_part = {k: v for k, v in table.items() if k in heads}
     out = {"meta": {"source": lock["repository"], "url": lock["download_url"], "licence": lock["licence"],

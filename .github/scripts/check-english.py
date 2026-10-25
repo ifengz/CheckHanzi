@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import io
+import csv
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from contextlib import redirect_stdout
+from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 from flask import Flask
@@ -76,6 +80,54 @@ def assert_word(client, query, word):
     assert body["phonetic"]
     assert body["meanings"]
     assert body["source"] == {"name": "ECDICT", "url": "https://github.com/skywind3000/ECDICT"}
+
+
+def load_reverse_dictionary_generator():
+    spec = importlib.util.spec_from_file_location(
+        "generate_english", Path(ROOT) / "models/dictionary/generate_english.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_reverse_dictionary_qualified_lines():
+    generator = load_reverse_dictionary_generator()
+    assert list(generator.gloss_candidates(None)) == []
+    for newline in ("\\r\\n", "\\n", "\r\n", "\n"):
+        translation = "n. 苹果, 银行" + newline + "art. [计] 累加器, 地址" + newline + "n. 学校, 花园"
+        candidates = list(generator.gloss_candidates(translation))
+        assert [(i, t) for i, t, _ in candidates] == list(enumerate(generator.gloss_tokens(translation)))
+        assert [t for _, t, qualified in candidates if qualified] == ["地址"]
+        assert candidates[-1][1:] == ("花园", False)
+    assert list(generator.gloss_candidates("n. 阿姨, 姨妈, 姑妈")) == [
+        (0, "阿姨", False), (1, "姨妈", False), (2, "姑妈", False)
+    ]
+
+
+def test_reverse_dictionary_does_not_promote_unreviewed_fallback():
+    generator = load_reverse_dictionary_generator()
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        source = root / "fixture.csv"
+        with source.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["word", "translation", "oxford"])
+            writer.writeheader()
+            writer.writerows([
+                {"word": "a", "translation": "n. [计] 累加器, 地址", "oxford": 1},
+                {"word": "fallback", "translation": "n. 测试, 地址", "oxford": 1},
+                {"word": "apple", "translation": "n. 苹果, 家伙", "oxford": 1},
+            ])
+        with patch.object(generator, "ROOT", root), patch.object(
+            generator, "app_universe", return_value=({"址"}, {"地址", "苹果"})
+        ), redirect_stdout(io.StringIO()):
+            generator.build(source, generator.sha256(source), {
+                "repository": "fixture", "download_url": "fixture", "licence": "fixture"
+            })
+        text = (root / "english-data.js").read_text(encoding="utf-8")
+        output = json.loads(text.removeprefix("var ENGLISH_DATA = ").strip().removesuffix(";"))
+        assert output["word"] == {"苹果": "apple"}
+        assert output["char"] == {}
 
 
 def test_real_dictionary_words():
@@ -271,7 +323,17 @@ def test_nested_status_and_redirect_are_invalid():
 
 
 def main():
-    tests = [value for name, value in globals().items() if name.startswith("test_")]
+    tests = []
+    generator_available = (Path(ROOT) / "models/dictionary/generate_english.py").is_file()
+    backend_only = not (Path(ROOT) / "char-dict.html").is_file()
+    for name, value in globals().items():
+        if not name.startswith("test_"):
+            continue
+        # The backend release intentionally excludes build-time dictionary tools.
+        if name.startswith("test_reverse_dictionary_") and backend_only and not generator_available:
+            print("SKIP {} (build-time generator absent from backend-only package)".format(name))
+            continue
+        tests.append(value)
     for test in tests:
         test()
         print("PASS {}".format(test.__name__))
